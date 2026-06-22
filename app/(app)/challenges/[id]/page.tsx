@@ -242,11 +242,12 @@ export default async function ChallengePage({
 
       {/* ── Ivory panel ── */}
       <div
-        className="flex flex-col gap-5 px-5 pt-6 flex-1"
+        className="flex flex-col gap-5 px-5 pt-8 flex-1 relative"
         style={{
           backgroundColor: "#fdf5e6",
           borderRadius: "28px 28px 0 0",
           marginTop: -28,
+          zIndex: 1,
         }}
       >
         {/* Your progress card */}

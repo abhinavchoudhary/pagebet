@@ -5,8 +5,8 @@ import { usePathname } from "next/navigation";
 import { Home, BookOpen, Rss, User } from "lucide-react";
 
 const tabs = [
-  { href: "/", label: "Home", Icon: Home, match: (p: string) => p === "/" },
-  { href: "/library", label: "Bets", Icon: BookOpen, match: (p: string) => p.startsWith("/library") || p.startsWith("/challenges") },
+  { href: "/", label: "Challenges", Icon: Home, match: (p: string) => p === "/" || p.startsWith("/challenges") },
+  { href: "/library", label: "Library", Icon: BookOpen, match: (p: string) => p.startsWith("/library") },
   { href: "/feed", label: "Feed", Icon: Rss, match: (p: string) => p.startsWith("/feed") },
   { href: "/profile", label: "You", Icon: User, match: (p: string) => p.startsWith("/profile") },
 ];

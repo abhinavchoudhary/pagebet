@@ -117,34 +117,32 @@ export function LogSessionDrawer({
                   placeholder="Search your library…"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  autoFocus
                 />
               </div>
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto -mx-5 px-5">
                 {filteredBooks.length === 0 ? (
                   <p className="text-sm text-center py-8" style={{ color: "var(--text-muted)", fontFamily: "var(--font-inter)" }}>
                     No books found. Add one in Library.
                   </p>
                 ) : (
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="flex flex-col divide-y" style={{ borderColor: "var(--border-default)" }}>
                     {filteredBooks.map((book) => (
                       <button
                         key={book.id}
                         onClick={() => { setSelectedBook(book); setStep(2); }}
-                        className="flex flex-col gap-2 p-3 rounded-[4px] text-left"
-                        style={{ backgroundColor: "var(--cream)", border: "1px solid var(--border-default)" }}
+                        className="flex items-center gap-3 py-3 text-left w-full"
                       >
                         {book.coverUrl ? (
-                          <img src={book.coverUrl} alt={book.title} className="w-full aspect-[2/3] object-cover rounded-[2px]" />
+                          <img src={book.coverUrl} alt={book.title} className="rounded-[2px] object-cover shrink-0" style={{ width: 36, height: 54 }} />
                         ) : (
                           <div
-                            className="w-full aspect-[2/3] rounded-[2px] flex items-center justify-center"
-                            style={{ backgroundColor: "var(--espresso)" }}
+                            className="rounded-[2px] shrink-0"
+                            style={{ width: 36, height: 54, backgroundColor: "var(--espresso)" }}
                           />
                         )}
-                        <div>
+                        <div className="flex-1 min-w-0">
                           <p
-                            className="text-xs font-medium leading-tight line-clamp-2"
+                            className="text-sm font-medium leading-tight line-clamp-2"
                             style={{ color: "var(--text-primary)", fontFamily: "var(--font-inter)" }}
                           >
                             {book.title}
@@ -158,6 +156,7 @@ export function LogSessionDrawer({
                             </p>
                           )}
                         </div>
+                        <ChevronRight size={16} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
                       </button>
                     ))}
                   </div>

@@ -10,10 +10,13 @@ import {
   users,
   books,
   readingSessions,
+  feedReactions,
 } from "@/lib/db/schema";
-import { eq, and, sum } from "drizzle-orm";
+import { eq, and, sum, desc, inArray } from "drizzle-orm";
 import { Leaderboard } from "@/components/leaderboard";
 import { InviteLinkCopy } from "@/components/invite-link-copy";
+import { FeedItem } from "@/components/feed-item";
+import { ScrollToTop } from "@/components/scroll-to-top";
 import { getRollingWeek } from "@/lib/rolling-week";
 import { computePenalty } from "@/lib/penalty";
 
@@ -59,7 +62,9 @@ export default async function ChallengePage({
 
   const now = new Date();
 
-  const [leaderboard, allTimeTotals, challengeBooks] = await Promise.all([
+  const memberIds = members.map((m) => m.userId);
+
+  const [leaderboard, allTimeTotals, challengeBooks, recentSessions] = await Promise.all([
     Promise.all(
       members.map(async (m) => {
         const { weekStart } = getRollingWeek(m.joinedAt, now);
@@ -122,6 +127,33 @@ export default async function ChallengePage({
           eq(challengeSessionCredits.challengeId, id)
         )
       ),
+
+    memberIds.length > 0
+      ? db
+          .select({
+            id: readingSessions.id,
+            userId: readingSessions.userId,
+            pagesRead: readingSessions.pagesRead,
+            loggedAt: readingSessions.loggedAt,
+            bookTitle: books.title,
+            bookCoverUrl: books.coverUrl,
+            bookAuthors: books.authors,
+            userName: users.name,
+            userImage: users.image,
+          })
+          .from(readingSessions)
+          .innerJoin(books, eq(readingSessions.bookId, books.id))
+          .innerJoin(users, eq(readingSessions.userId, users.id))
+          .innerJoin(
+            challengeSessionCredits,
+            and(
+              eq(challengeSessionCredits.sessionId, readingSessions.id),
+              eq(challengeSessionCredits.challengeId, id)
+            )
+          )
+          .orderBy(desc(readingSessions.loggedAt))
+          .limit(20)
+      : Promise.resolve([]),
   ]);
 
   const allTimePagesMap = Object.fromEntries(
@@ -136,6 +168,18 @@ export default async function ChallengePage({
 
   const isCreator = challenge.creatorId === userId;
   const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/join/${challenge.inviteToken}`;
+
+  const sessionIds = recentSessions.map((s) => s.id);
+  const allReactions = sessionIds.length > 0
+    ? await db.select().from(feedReactions).where(inArray(feedReactions.sessionId, sessionIds))
+    : [];
+  const reactionsBySession: Record<string, Record<string, number>> = {};
+  const myReactionBySession: Record<string, string | null> = {};
+  for (const r of allReactions) {
+    if (!reactionsBySession[r.sessionId]) reactionsBySession[r.sessionId] = {};
+    reactionsBySession[r.sessionId][r.emoji] = (reactionsBySession[r.sessionId][r.emoji] ?? 0) + 1;
+    if (r.userId === userId) myReactionBySession[r.sessionId] = r.emoji;
+  }
 
   const sortedLeaderboard = leaderboard.sort(
     (a, b) => b.pages_this_week - a.pages_this_week
@@ -156,10 +200,11 @@ export default async function ChallengePage({
 
   return (
     <div className="flex flex-col">
+      <ScrollToTop />
       {/* ── Dark espresso header ── */}
       <div
-        className="relative px-5 pt-5"
-        style={{ backgroundColor: "#3b2412", paddingBottom: "52px" }}
+        className="relative px-5"
+        style={{ backgroundColor: "#3b2412", paddingBottom: "52px", paddingTop: "calc(env(safe-area-inset-top, 0px) + 20px)" }}
       >
         {/* Back row */}
         <div className="flex items-center justify-between mb-5">
@@ -527,6 +572,41 @@ export default async function ChallengePage({
               Invite link
             </p>
             <InviteLinkCopy url={inviteUrl} />
+          </div>
+        )}
+
+        {/* Activity feed */}
+        {recentSessions.length > 0 && (
+          <div>
+            <p
+              className="text-[10px] font-semibold uppercase mb-3"
+              style={{
+                letterSpacing: "0.1em",
+                color: "#9c826a",
+                fontFamily: "var(--font-inter)",
+              }}
+            >
+              Recent Activity
+            </p>
+            <div className="flex flex-col gap-4">
+              {recentSessions.map((s) => (
+                <FeedItem
+                  key={s.id}
+                  sessionId={s.id}
+                  userId={s.userId}
+                  userName={s.userName ?? "Reader"}
+                  avatarUrl={s.userImage ?? null}
+                  bookTitle={s.bookTitle}
+                  bookCoverUrl={s.bookCoverUrl ?? null}
+                  bookAuthor={s.bookAuthors?.[0] ?? null}
+                  pagesRead={s.pagesRead}
+                  loggedAt={s.loggedAt.toISOString()}
+                  reactions={reactionsBySession[s.id] ?? {}}
+                  myReaction={myReactionBySession[s.id] ?? null}
+                  currentUserId={userId}
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>

@@ -6,7 +6,11 @@ import { formatDistanceToNow } from "date-fns";
 import { toggleReaction } from "@/lib/actions/reactions";
 import { deleteSession, editSessionPages } from "@/lib/actions/sessions";
 
-const REACTIONS = ["👏", "🔥", "📚"] as const;
+const REACTIONS = [
+  { key: "👏", label: "Clap" },
+  { key: "🔥", label: "Fire" },
+  { key: "📚", label: "Read" },
+] as const;
 
 interface FeedItemProps {
   sessionId: string;
@@ -38,7 +42,7 @@ export function FeedItem({
   currentUserId,
 }: FeedItemProps) {
   const [reactions, setReactions] = useState(initialReactions);
-  const [myReaction, setMyReaction] = useState(initialMyReaction);
+  const [myReaction, setMyReaction] = useState<string | null>(initialMyReaction);
   const [pagesRead, setPagesRead] = useState(initialPagesRead);
   const [showMenu, setShowMenu] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -50,9 +54,9 @@ export function FeedItem({
 
   const isOwn = userId === currentUserId;
 
-  function handleReaction(emoji: string) {
+  function handleReaction(key: string) {
     const prev = myReaction;
-    const next = prev === emoji ? null : emoji;
+    const next = prev === key ? null : key;
     setMyReaction(next);
     setReactions((r) => {
       const updated = { ...r };
@@ -60,7 +64,7 @@ export function FeedItem({
       if (next) updated[next] = (updated[next] ?? 0) + 1;
       return updated;
     });
-    startTransition(async () => { await toggleReaction(sessionId, emoji); });
+    startTransition(async () => { await toggleReaction(sessionId, key); });
   }
 
   function handleDelete() {
@@ -266,23 +270,25 @@ export function FeedItem({
 
       {/* Reactions */}
       <div className="flex gap-2 mt-3">
-        {REACTIONS.map((emoji) => (
+        {REACTIONS.map(({ key, label }) => (
           <button
-            key={emoji}
-            onClick={() => handleReaction(emoji)}
-            className="flex items-center gap-1 text-sm px-2.5 py-1 rounded-full transition-colors"
+            key={key}
+            onClick={() => handleReaction(key)}
+            className="flex items-center gap-1.5 text-xs px-3 py-1 rounded-full transition-colors"
             style={{
-              backgroundColor: myReaction === emoji ? "var(--app-accent-light)" : "transparent",
-              border: `1px solid ${myReaction === emoji ? "var(--amber)" : "var(--border-default)"}`,
+              backgroundColor: myReaction === key ? "var(--app-accent-light)" : "transparent",
+              border: `1px solid ${myReaction === key ? "var(--amber)" : "var(--border-default)"}`,
+              color: myReaction === key ? "var(--espresso)" : "var(--text-muted)",
+              fontFamily: "var(--font-inter)",
+              fontWeight: myReaction === key ? 600 : 400,
             }}
           >
-            <span>{emoji}</span>
-            <span
-              className="text-[11px]"
-              style={{ color: "var(--text-muted)", fontFamily: "var(--font-inter)" }}
-            >
-              {reactions[emoji] ?? 0}
-            </span>
+            <span>{label}</span>
+            {(reactions[key] ?? 0) > 0 && (
+              <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
+                {reactions[key]}
+              </span>
+            )}
           </button>
         ))}
       </div>

@@ -179,8 +179,8 @@ export default async function HomePage() {
     <div className="flex flex-col min-h-full">
       {/* ── Dark espresso header ── */}
       <div
-        className="relative px-5 pt-5"
-        style={{ backgroundColor: "#3b2412", paddingBottom: "60px" }}
+        className="relative px-5"
+        style={{ backgroundColor: "#3b2412", paddingBottom: "60px", paddingTop: "calc(env(safe-area-inset-top, 0px) + 20px)" }}
       >
         {/* Greeting + avatar */}
         <div className="flex items-start justify-between mb-5">

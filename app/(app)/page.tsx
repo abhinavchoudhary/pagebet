@@ -9,7 +9,7 @@ import {
   challengeSessionCredits,
   users,
 } from "@/lib/db/schema";
-import { eq, and, sum } from "drizzle-orm";
+import { eq, and, sum, inArray } from "drizzle-orm";
 import { ChallengeCard } from "@/components/challenge-card";
 import { HomeLogButton } from "@/components/home-log-button";
 import { getRollingWeek } from "@/lib/rolling-week";
@@ -42,57 +42,62 @@ export default async function HomePage() {
 
   const challengeIds = memberships.map((m) => m.challengeId);
 
-  const myChallenges =
-    challengeIds.length > 0
-      ? await db
+  // Round 2: fetch challenges + all member info + all credits in parallel
+  const [activeChallenges, allMembers, allCredits] = challengeIds.length > 0
+    ? await Promise.all([
+        db
           .select()
           .from(challenges)
-          .where(eq(challenges.archived, false))
-      : [];
+          .where(and(inArray(challenges.id, challengeIds), eq(challenges.archived, false))),
+        db
+          .select({
+            challengeId: challengeMembers.challengeId,
+            userId: challengeMembers.userId,
+            displayName: users.name,
+            avatarUrl: users.image,
+            joinedAt: challengeMembers.joinedAt,
+          })
+          .from(challengeMembers)
+          .innerJoin(users, eq(challengeMembers.userId, users.id))
+          .where(inArray(challengeMembers.challengeId, challengeIds)),
+        db
+          .select({
+            challengeId: challengeSessionCredits.challengeId,
+            userId: challengeSessionCredits.userId,
+            weekStart: challengeSessionCredits.weekStart,
+            total: sum(challengeSessionCredits.pagesCredited),
+          })
+          .from(challengeSessionCredits)
+          .where(inArray(challengeSessionCredits.challengeId, challengeIds))
+          .groupBy(
+            challengeSessionCredits.challengeId,
+            challengeSessionCredits.userId,
+            challengeSessionCredits.weekStart
+          ),
+      ])
+    : [[], [], []] as const;
 
-  const activeChallenges = myChallenges.filter((c) =>
-    challengeIds.includes(c.id)
-  );
-
+  // Build week summary from first challenge
   const firstMembership = memberships[0];
   const firstChallenge = firstMembership
     ? activeChallenges.find((c) => c.id === firstMembership.challengeId)
     : null;
 
-  let weekSummary = {
-    pages: 0,
-    goal: 35,
-    penalty: 0,
-    daysRemaining: 7,
-    currency: "₹",
-  };
+  let weekSummary = { pages: 0, goal: 35, penalty: 0, daysRemaining: 7, currency: "₹" };
 
   if (firstChallenge && firstMembership) {
-    const { weekStart, daysRemaining } = getRollingWeek(
-      firstMembership.joinedAt,
-      now
-    );
+    const { weekStart, daysRemaining } = getRollingWeek(firstMembership.joinedAt, now);
     const weekStartStr = weekStart.toISOString().split("T")[0];
-
-    const [creditSum] = await db
-      .select({ total: sum(challengeSessionCredits.pagesCredited) })
-      .from(challengeSessionCredits)
-      .where(
-        and(
-          eq(challengeSessionCredits.challengeId, firstChallenge.id),
-          eq(challengeSessionCredits.userId, userId),
-          eq(challengeSessionCredits.weekStart, weekStartStr)
-        )
-      );
-
-    const pagesThisWeek = Number(creditSum?.total ?? 0);
+    const myWeekRow = allCredits.find(
+      (c) => c.challengeId === firstChallenge.id && c.userId === userId && c.weekStart === weekStartStr
+    );
+    const pagesThisWeek = Number(myWeekRow?.total ?? 0);
     const { penaltyExposure } = computePenalty({
       weeklyGoal: firstChallenge.weeklyGoal,
       pagesThisWeek,
       penaltyAmount: Number(firstChallenge.penaltyAmount),
       carryOver: firstChallenge.carryOver,
     });
-
     weekSummary = {
       pages: pagesThisWeek,
       goal: firstChallenge.weeklyGoal,
@@ -102,66 +107,41 @@ export default async function HomePage() {
     };
   }
 
-  const leaderboards = await Promise.all(
-    activeChallenges.slice(0, 3).map(async (challenge) => {
-      const membership = memberships.find((m) => m.challengeId === challenge.id);
-      if (!membership) return null;
+  // Build leaderboards fully in JS
+  const leaderboards = activeChallenges.slice(0, 3).map((challenge) => {
+    const membership = memberships.find((m) => m.challengeId === challenge.id);
+    if (!membership) return null;
+    const members = allMembers.filter((m) => m.challengeId === challenge.id);
+    const challengeCredits = allCredits.filter((c) => c.challengeId === challenge.id);
 
-      const members = await db
-        .select({
-          userId: challengeMembers.userId,
-          displayName: users.name,
-          avatarUrl: users.image,
-          joinedAt: challengeMembers.joinedAt,
-        })
-        .from(challengeMembers)
-        .innerJoin(users, eq(challengeMembers.userId, users.id))
-        .where(eq(challengeMembers.challengeId, challenge.id));
-
-      const entries = await Promise.all(
-        members.map(async (m) => {
-          const { weekStart } = getRollingWeek(m.joinedAt, now);
-          const [creditSum] = await db
-            .select({ total: sum(challengeSessionCredits.pagesCredited) })
-            .from(challengeSessionCredits)
-            .where(
-              and(
-                eq(challengeSessionCredits.challengeId, challenge.id),
-                eq(challengeSessionCredits.userId, m.userId),
-                eq(
-                  challengeSessionCredits.weekStart,
-                  weekStart.toISOString().split("T")[0]
-                )
-              )
-            );
-
-          const pagesThisWeek = Number(creditSum?.total ?? 0);
-          const { penaltyExposure } = computePenalty({
-            weeklyGoal: challenge.weeklyGoal,
-            pagesThisWeek,
-            penaltyAmount: Number(challenge.penaltyAmount),
-            carryOver: challenge.carryOver,
-          });
-
-          return {
-            user_id: m.userId,
-            display_name: m.displayName ?? "Reader",
-            avatar_url: m.avatarUrl ?? null,
-            pages_this_week: pagesThisWeek,
-            weekly_goal: challenge.weeklyGoal,
-            penalty_exposure: penaltyExposure,
-            penalty_currency: challenge.penaltyCurrency,
-          };
-        })
-      );
-
+    const entries = members.map((m) => {
+      const { weekStart } = getRollingWeek(m.joinedAt, now);
+      const weekStartStr = weekStart.toISOString().split("T")[0];
+      const weekRow = challengeCredits.find((c) => c.userId === m.userId && c.weekStart === weekStartStr);
+      const pagesThisWeek = Number(weekRow?.total ?? 0);
+      const { penaltyExposure } = computePenalty({
+        weeklyGoal: challenge.weeklyGoal,
+        pagesThisWeek,
+        penaltyAmount: Number(challenge.penaltyAmount),
+        carryOver: challenge.carryOver,
+      });
       return {
-        id: challenge.id,
-        name: challenge.name,
-        entries: entries.sort((a, b) => b.pages_this_week - a.pages_this_week),
+        user_id: m.userId,
+        display_name: m.displayName ?? "Reader",
+        avatar_url: m.avatarUrl ?? null,
+        pages_this_week: pagesThisWeek,
+        weekly_goal: challenge.weeklyGoal,
+        penalty_exposure: penaltyExposure,
+        penalty_currency: challenge.penaltyCurrency,
       };
-    })
-  );
+    });
+
+    return {
+      id: challenge.id,
+      name: challenge.name,
+      entries: entries.sort((a, b) => b.pages_this_week - a.pages_this_week),
+    };
+  });
 
   const pct =
     weekSummary.goal > 0

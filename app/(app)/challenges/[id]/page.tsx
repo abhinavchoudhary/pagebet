@@ -31,84 +31,42 @@ export default async function ChallengePage({
 
   const userId = session.user.id;
 
-  const [challenge] = await db
-    .select()
-    .from(challenges)
-    .where(eq(challenges.id, id));
+  // Round 1: fetch challenge, membership, and members in parallel
+  const [[challenge], [membership], members] = await Promise.all([
+    db.select().from(challenges).where(eq(challenges.id, id)),
+    db
+      .select({ joinedAt: challengeMembers.joinedAt })
+      .from(challengeMembers)
+      .where(and(eq(challengeMembers.challengeId, id), eq(challengeMembers.userId, userId))),
+    db
+      .select({
+        userId: challengeMembers.userId,
+        displayName: users.name,
+        avatarUrl: users.image,
+        joinedAt: challengeMembers.joinedAt,
+      })
+      .from(challengeMembers)
+      .innerJoin(users, eq(challengeMembers.userId, users.id))
+      .where(eq(challengeMembers.challengeId, id)),
+  ]);
+
   if (!challenge) notFound();
-
-  const [membership] = await db
-    .select({ joinedAt: challengeMembers.joinedAt })
-    .from(challengeMembers)
-    .where(
-      and(
-        eq(challengeMembers.challengeId, id),
-        eq(challengeMembers.userId, userId)
-      )
-    );
-
   if (!membership) redirect("/");
-
-  const members = await db
-    .select({
-      userId: challengeMembers.userId,
-      displayName: users.name,
-      avatarUrl: users.image,
-      joinedAt: challengeMembers.joinedAt,
-    })
-    .from(challengeMembers)
-    .innerJoin(users, eq(challengeMembers.userId, users.id))
-    .where(eq(challengeMembers.challengeId, id));
 
   const now = new Date();
 
-  const memberIds = members.map((m) => m.userId);
-
-  const [leaderboard, allTimeTotals, challengeBooks, recentSessions] = await Promise.all([
-    Promise.all(
-      members.map(async (m) => {
-        const { weekStart } = getRollingWeek(m.joinedAt, now);
-        const [creditSum] = await db
-          .select({ total: sum(challengeSessionCredits.pagesCredited) })
-          .from(challengeSessionCredits)
-          .where(
-            and(
-              eq(challengeSessionCredits.challengeId, id),
-              eq(challengeSessionCredits.userId, m.userId),
-              eq(
-                challengeSessionCredits.weekStart,
-                weekStart.toISOString().split("T")[0]
-              )
-            )
-          );
-
-        const pagesThisWeek = Number(creditSum?.total ?? 0);
-        const { penaltyExposure } = computePenalty({
-          weeklyGoal: challenge.weeklyGoal,
-          pagesThisWeek,
-          penaltyAmount: Number(challenge.penaltyAmount),
-          carryOver: challenge.carryOver,
-        });
-
-        return {
-          user_id: m.userId,
-          display_name: m.displayName ?? "Reader",
-          avatar_url: m.avatarUrl ?? null,
-          pages_this_week: pagesThisWeek,
-          weekly_goal: challenge.weeklyGoal,
-          penalty_exposure: penaltyExposure,
-        };
-      })
-    ),
-
+  // Round 2: all remaining data in parallel — single batched credits query instead of N queries
+  const [allCredits, challengeBooks, recentSessions] = await Promise.all([
+    // One query for ALL credits in this challenge, grouped by user+week
     db
       .select({
         userId: challengeSessionCredits.userId,
+        weekStart: challengeSessionCredits.weekStart,
         total: sum(challengeSessionCredits.pagesCredited),
       })
       .from(challengeSessionCredits)
       .where(eq(challengeSessionCredits.challengeId, id))
-      .groupBy(challengeSessionCredits.userId),
+      .groupBy(challengeSessionCredits.userId, challengeSessionCredits.weekStart),
 
     db
       .selectDistinct({
@@ -128,47 +86,61 @@ export default async function ChallengePage({
         )
       ),
 
-    memberIds.length > 0
-      ? db
-          .select({
-            id: readingSessions.id,
-            userId: readingSessions.userId,
-            pagesRead: readingSessions.pagesRead,
-            loggedAt: readingSessions.loggedAt,
-            bookTitle: books.title,
-            bookCoverUrl: books.coverUrl,
-            bookAuthors: books.authors,
-            userName: users.name,
-            userImage: users.image,
-          })
-          .from(readingSessions)
-          .innerJoin(books, eq(readingSessions.bookId, books.id))
-          .innerJoin(users, eq(readingSessions.userId, users.id))
-          .innerJoin(
-            challengeSessionCredits,
-            and(
-              eq(challengeSessionCredits.sessionId, readingSessions.id),
-              eq(challengeSessionCredits.challengeId, id)
-            )
-          )
-          .orderBy(desc(readingSessions.loggedAt))
-          .limit(20)
-      : Promise.resolve([]),
+    db
+      .select({
+        id: readingSessions.id,
+        userId: readingSessions.userId,
+        pagesRead: readingSessions.pagesRead,
+        loggedAt: readingSessions.loggedAt,
+        bookTitle: books.title,
+        bookCoverUrl: books.coverUrl,
+        bookAuthors: books.authors,
+        userName: users.name,
+        userImage: users.image,
+      })
+      .from(readingSessions)
+      .innerJoin(books, eq(readingSessions.bookId, books.id))
+      .innerJoin(users, eq(readingSessions.userId, users.id))
+      .innerJoin(
+        challengeSessionCredits,
+        and(
+          eq(challengeSessionCredits.sessionId, readingSessions.id),
+          eq(challengeSessionCredits.challengeId, id)
+        )
+      )
+      .orderBy(desc(readingSessions.loggedAt))
+      .limit(20),
   ]);
 
-  const allTimePagesMap = Object.fromEntries(
-    allTimeTotals.map((r) => [r.userId, Number(r.total ?? 0)])
-  );
+  // Compute leaderboard in JS from the batched credits
+  const leaderboard = members.map((m) => {
+    const { weekStart } = getRollingWeek(m.joinedAt, now);
+    const weekStartStr = weekStart.toISOString().split("T")[0];
+    const memberCredits = allCredits.filter((c) => c.userId === m.userId);
+    const weekRow = memberCredits.find((c) => c.weekStart === weekStartStr);
+    const pagesThisWeek = Number(weekRow?.total ?? 0);
+    const { penaltyExposure } = computePenalty({
+      weeklyGoal: challenge.weeklyGoal,
+      pagesThisWeek,
+      penaltyAmount: Number(challenge.penaltyAmount),
+      carryOver: challenge.carryOver,
+    });
+    return {
+      user_id: m.userId,
+      display_name: m.displayName ?? "Reader",
+      avatar_url: m.avatarUrl ?? null,
+      pages_this_week: pagesThisWeek,
+      weekly_goal: challenge.weeklyGoal,
+      penalty_exposure: penaltyExposure,
+    };
+  });
 
-  const booksByMember: Record<string, typeof challengeBooks> = {};
-  for (const b of challengeBooks) {
-    if (!booksByMember[b.userId]) booksByMember[b.userId] = [];
-    booksByMember[b.userId].push(b);
+  const allTimePagesMap: Record<string, number> = {};
+  for (const c of allCredits) {
+    allTimePagesMap[c.userId] = (allTimePagesMap[c.userId] ?? 0) + Number(c.total ?? 0);
   }
 
-  const isCreator = challenge.creatorId === userId;
-  const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/join/${challenge.inviteToken}`;
-
+  // Fetch reactions for the recent sessions
   const sessionIds = recentSessions.map((s) => s.id);
   const allReactions = sessionIds.length > 0
     ? await db.select().from(feedReactions).where(inArray(feedReactions.sessionId, sessionIds))
@@ -181,21 +153,26 @@ export default async function ChallengePage({
     if (r.userId === userId) myReactionBySession[r.sessionId] = r.emoji;
   }
 
+  const booksByMember: Record<string, typeof challengeBooks> = {};
+  for (const b of challengeBooks) {
+    if (!booksByMember[b.userId]) booksByMember[b.userId] = [];
+    booksByMember[b.userId].push(b);
+  }
+
+  const isCreator = challenge.creatorId === userId;
+  const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/join/${challenge.inviteToken}`;
+
   const sortedLeaderboard = leaderboard.sort(
     (a, b) => b.pages_this_week - a.pages_this_week
   );
   const allTimeSorted = [...members].sort(
-    (a, b) =>
-      (allTimePagesMap[b.userId] ?? 0) - (allTimePagesMap[a.userId] ?? 0)
+    (a, b) => (allTimePagesMap[b.userId] ?? 0) - (allTimePagesMap[a.userId] ?? 0)
   );
 
   const myEntry = sortedLeaderboard.find((e) => e.user_id === userId);
   const pct =
     myEntry && myEntry.weekly_goal > 0
-      ? Math.min(
-          100,
-          Math.round((myEntry.pages_this_week / myEntry.weekly_goal) * 100)
-        )
+      ? Math.min(100, Math.round((myEntry.pages_this_week / myEntry.weekly_goal) * 100))
       : 0;
 
   return (
@@ -269,6 +246,23 @@ export default async function ChallengePage({
           marginTop: -28,
         }}
       >
+        {/* Invite link — top of panel */}
+        {challenge.inviteActive && (
+          <div>
+            <p
+              className="text-[10px] font-semibold uppercase mb-2"
+              style={{
+                letterSpacing: "0.1em",
+                color: "#9c826a",
+                fontFamily: "var(--font-inter)",
+              }}
+            >
+              Invite link
+            </p>
+            <InviteLinkCopy url={inviteUrl} />
+          </div>
+        )}
+
         {/* Your progress card */}
         {myEntry && (
           <div>
@@ -556,22 +550,6 @@ export default async function ChallengePage({
                 );
               })}
             </div>
-          </div>
-        )}
-
-        {challenge.inviteActive && (
-          <div>
-            <p
-              className="text-[10px] font-semibold uppercase mb-2"
-              style={{
-                letterSpacing: "0.1em",
-                color: "#9c826a",
-                fontFamily: "var(--font-inter)",
-              }}
-            >
-              Invite link
-            </p>
-            <InviteLinkCopy url={inviteUrl} />
           </div>
         )}
 

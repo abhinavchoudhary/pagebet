@@ -14,7 +14,7 @@ import {
 } from "@/lib/db/schema";
 import { eq, and, sum, desc, inArray } from "drizzle-orm";
 import { Leaderboard } from "@/components/leaderboard";
-import { InviteLinkCopy } from "@/components/invite-link-copy";
+import { InviteHeaderButton } from "@/components/invite-header-button";
 import { FeedItem } from "@/components/feed-item";
 import { ScrollToTop } from "@/components/scroll-to-top";
 import { getRollingWeek } from "@/lib/rolling-week";
@@ -198,11 +198,14 @@ export default async function ChallengePage({
               Back
             </span>
           </Link>
-          {isCreator && (
-            <Link href={`/challenges/${id}/settings`}>
-              <Settings size={20} style={{ color: "rgba(255,255,255,0.6)" }} />
-            </Link>
-          )}
+          <div className="flex items-center gap-4">
+            {challenge.inviteActive && <InviteHeaderButton url={inviteUrl} />}
+            {isCreator && (
+              <Link href={`/challenges/${id}/settings`}>
+                <Settings size={20} style={{ color: "rgba(255,255,255,0.6)" }} />
+              </Link>
+            )}
+          </div>
         </div>
 
         {/* Challenge title */}
@@ -246,23 +249,6 @@ export default async function ChallengePage({
           marginTop: -28,
         }}
       >
-        {/* Invite link — top of panel */}
-        {challenge.inviteActive && (
-          <div>
-            <p
-              className="text-[10px] font-semibold uppercase mb-2"
-              style={{
-                letterSpacing: "0.1em",
-                color: "#9c826a",
-                fontFamily: "var(--font-inter)",
-              }}
-            >
-              Invite link
-            </p>
-            <InviteLinkCopy url={inviteUrl} />
-          </div>
-        )}
-
         {/* Your progress card */}
         {myEntry && (
           <div>

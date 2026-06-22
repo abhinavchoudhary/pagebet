@@ -15,24 +15,33 @@ interface LeaderboardProps {
 
 export function Leaderboard({ entries, penaltyCurrency, currentUserId }: LeaderboardProps) {
   return (
-    <div className="flex flex-col gap-2">
+    <div
+      className="rounded-[4px] overflow-hidden"
+      style={{ border: "1px solid var(--border-default)" }}
+    >
       {entries.map((entry, i) => {
         const pct = Math.min(1, entry.pages_this_week / entry.weekly_goal);
-        const done = entry.pages_this_week >= entry.weekly_goal;
         const isMe = entry.user_id === currentUserId;
+        const isLeader = i === 0;
+        const barColor = isLeader ? "#c8913a" : isMe ? "#7a4a1e" : "#9c826a";
 
         return (
           <div
             key={entry.user_id}
-            className="flex items-center gap-3 p-3 rounded-[12px]"
+            className="flex items-center gap-3 px-4 py-3"
             style={{
-              backgroundColor: isMe ? "var(--app-accent-light)" : "var(--bg-card)",
-              border: `1px solid ${isMe ? "var(--app-accent)" : "var(--border-default)"}`,
+              backgroundColor: isMe ? "var(--cream)" : "var(--old-lace)",
+              borderTop: i === 0 ? "none" : isMe ? "2px solid #c8913a" : "1px solid var(--border-default)",
+              borderLeft: isMe ? "3px solid #c8913a" : "none",
             }}
           >
             <span
-              className="text-sm font-medium w-5 text-center tabular-nums"
-              style={{ color: "var(--text-muted)" }}
+              className="text-sm tabular-nums w-5 text-center shrink-0"
+              style={{
+                color: "var(--text-muted)",
+                fontFamily: "var(--font-inter)",
+                fontWeight: isLeader ? 700 : 400,
+              }}
             >
               {i + 1}
             </span>
@@ -41,32 +50,46 @@ export function Leaderboard({ entries, penaltyCurrency, currentUserId }: Leaderb
               <img
                 src={entry.avatar_url}
                 alt={entry.display_name}
-                className="w-8 h-8 rounded-full object-cover shrink-0"
+                className="w-7 h-7 rounded-full object-cover shrink-0"
               />
             ) : (
               <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold shrink-0"
-                style={{ backgroundColor: "var(--bg-subtle)", color: "var(--text-secondary)" }}
+                className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
+                style={{ backgroundColor: "#e4d8c4", color: "var(--text-muted)" }}
               >
                 {entry.display_name[0]?.toUpperCase()}
               </div>
             )}
 
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>
-                {entry.display_name}{isMe ? " (you)" : ""}
+              <p
+                className="text-sm truncate"
+                style={{
+                  color: isMe ? "var(--espresso)" : "var(--text-primary)",
+                  fontWeight: isMe ? 700 : 500,
+                  fontFamily: "var(--font-inter)",
+                }}
+              >
+                {entry.display_name.split(" ")[0]}{isMe ? " (you)" : ""}
               </p>
               <div className="flex items-center gap-2 mt-1">
-                <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ backgroundColor: "var(--bg-subtle)" }}>
+                <div
+                  className="flex-1 rounded-full overflow-hidden"
+                  style={{ height: 4, backgroundColor: "#dfd0b8" }}
+                >
                   <div
-                    className="h-full rounded-full"
                     style={{
+                      height: "100%",
                       width: `${pct * 100}%`,
-                      backgroundColor: done ? "#4A7C59" : "var(--app-accent)",
+                      backgroundColor: barColor,
+                      borderRadius: "inherit",
                     }}
                   />
                 </div>
-                <span className="text-xs tabular-nums shrink-0" style={{ color: "var(--text-muted)" }}>
+                <span
+                  className="text-[11px] tabular-nums shrink-0"
+                  style={{ color: "var(--text-muted)", fontFamily: "var(--font-inter)" }}
+                >
                   {entry.pages_this_week}/{entry.weekly_goal}
                 </span>
               </div>
@@ -74,13 +97,22 @@ export function Leaderboard({ entries, penaltyCurrency, currentUserId }: Leaderb
 
             {entry.penalty_exposure > 0 ? (
               <span
-                className="text-xs font-medium px-2 py-0.5 rounded-full shrink-0"
-                style={{ backgroundColor: "var(--penalty-bg)", color: "var(--penalty)" }}
+                className="text-xs font-medium px-2 py-0.5 rounded-[2px] shrink-0"
+                style={{
+                  backgroundColor: "var(--penalty-bg)",
+                  color: "var(--penalty)",
+                  fontFamily: "var(--font-inter)",
+                }}
               >
                 {penaltyCurrency}{entry.penalty_exposure}
               </span>
             ) : (
-              <span className="text-sm shrink-0">✓</span>
+              <span
+                className="text-[11px] font-semibold shrink-0"
+                style={{ color: "#c8913a", fontFamily: "var(--font-inter)" }}
+              >
+                ✓
+              </span>
             )}
           </div>
         );

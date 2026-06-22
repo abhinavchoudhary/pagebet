@@ -9,7 +9,7 @@ interface PageStripProps {
 export function PageStrip({ pagesRead, weeklyGoal, completed = false }: PageStripProps) {
   const total = weeklyGoal;
   const filled = Math.min(pagesRead, total);
-  const milestones = [0, Math.floor(total * 0.2), Math.floor(total * 0.4), Math.floor(total * 0.6), total];
+  const milestones = [0, Math.floor(total * 0.25), Math.floor(total * 0.5), Math.floor(total * 0.75), total];
 
   return (
     <div className="w-full">
@@ -17,39 +17,33 @@ export function PageStrip({ pagesRead, weeklyGoal, completed = false }: PageStri
         {Array.from({ length: total }).map((_, i) => {
           const isRead = i < filled;
           const isCurrentPage = i === filled - 1 && pagesRead > 0 && pagesRead <= total;
-          const isMilestone = milestones.includes(i + 1);
 
-          let bgColor = "#F0EAE3";
-          let height = "16px";
+          let bgColor = "#e4d8c4";
+          let height = "14px";
 
           if (completed) {
-            bgColor = "#4A7C59";
-            height = "28px";
-          } else if (isCurrentPage && !completed) {
-            bgColor = "#C4919F";
-            height = "20px";
+            bgColor = "#c8913a";
+            height = "26px";
+          } else if (isCurrentPage) {
+            bgColor = "#b07040";
+            height = "18px";
           } else if (isRead) {
-            bgColor = "#7B3B52";
-            height = "28px";
+            bgColor = "#7a4a1e";
+            height = "26px";
           }
 
           return (
             <div
               key={i}
               className="flex-1 rounded-[1px] transition-all duration-300"
-              style={{
-                height,
-                backgroundColor: bgColor,
-                minWidth: "2px",
-              }}
-              aria-label={isMilestone ? `Page ${i + 1}` : undefined}
+              style={{ height, backgroundColor: bgColor, minWidth: "2px" }}
             />
           );
         })}
       </div>
       <div className="flex justify-between mt-1">
         {milestones.map((m) => (
-          <span key={m} className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+          <span key={m} className="text-[10px]" style={{ color: "var(--text-muted)", fontFamily: "var(--font-inter)" }}>
             {m}
           </span>
         ))}

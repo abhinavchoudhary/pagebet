@@ -10,7 +10,6 @@ import {
   users,
 } from "@/lib/db/schema";
 import { eq, and, sum } from "drizzle-orm";
-import { PageStrip } from "@/components/page-strip";
 import { ChallengeCard } from "@/components/challenge-card";
 import { HomeLogButton } from "@/components/home-log-button";
 import { getRollingWeek } from "@/lib/rolling-week";
@@ -22,6 +21,12 @@ export default async function HomePage() {
 
   const userId = session.user.id;
   const now = new Date();
+
+  const hour = now.getHours();
+  const greeting =
+    hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const firstName = session.user?.name?.split(" ")[0] ?? "Reader";
+  const userInitial = session.user?.name?.[0]?.toUpperCase() ?? "?";
 
   const [myBooks, memberships] = await Promise.all([
     db
@@ -54,10 +59,19 @@ export default async function HomePage() {
     ? activeChallenges.find((c) => c.id === firstMembership.challengeId)
     : null;
 
-  let weekSummary = { pages: 0, goal: 35, penalty: 0, daysRemaining: 7, currency: "₹" };
+  let weekSummary = {
+    pages: 0,
+    goal: 35,
+    penalty: 0,
+    daysRemaining: 7,
+    currency: "₹",
+  };
 
   if (firstChallenge && firstMembership) {
-    const { weekStart, daysRemaining } = getRollingWeek(firstMembership.joinedAt, now);
+    const { weekStart, daysRemaining } = getRollingWeek(
+      firstMembership.joinedAt,
+      now
+    );
     const weekStartStr = weekStart.toISOString().split("T")[0];
 
     const [creditSum] = await db
@@ -114,7 +128,10 @@ export default async function HomePage() {
               and(
                 eq(challengeSessionCredits.challengeId, challenge.id),
                 eq(challengeSessionCredits.userId, m.userId),
-                eq(challengeSessionCredits.weekStart, weekStart.toISOString().split("T")[0])
+                eq(
+                  challengeSessionCredits.weekStart,
+                  weekStart.toISOString().split("T")[0]
+                )
               )
             );
 
@@ -146,121 +163,312 @@ export default async function HomePage() {
     })
   );
 
-  const dayName = now.toLocaleDateString("en-US", { weekday: "long" });
-  const dateStr = now.toLocaleDateString("en-US", { month: "long", day: "numeric" });
-  const activeBooks = myBooks.slice(0, 3);
+  const pct =
+    weekSummary.goal > 0
+      ? Math.min(100, Math.round((weekSummary.pages / weekSummary.goal) * 100))
+      : 0;
+
+  const validLeaderboards = leaderboards.filter(Boolean);
+  const firstLb = validLeaderboards[0];
+
+  const showStickyNote =
+    firstChallenge &&
+    (weekSummary.penalty > 0 || weekSummary.daysRemaining <= 4);
 
   return (
-    <div className="flex flex-col gap-6">
-      <div>
-        <p className="text-xs font-medium" style={{ color: "var(--text-muted)" }}>
-          {dayName}, {dateStr}
-        </p>
-        <h1 className="font-serif text-2xl font-semibold italic mt-0.5" style={{ color: "var(--text-primary)" }}>
-          Your reading corner
-        </h1>
-      </div>
-
+    <div className="flex flex-col min-h-full">
+      {/* ── Dark espresso header ── */}
       <div
-        className="rounded-[16px] p-5"
-        style={{
-          backgroundColor: "var(--bg-card)",
-          boxShadow: "var(--shadow-card)",
-          border: "1px solid var(--border-default)",
-        }}
+        className="relative px-5 pt-5"
+        style={{ backgroundColor: "#3b2412", paddingBottom: "60px" }}
       >
-        <div className="flex items-start justify-between gap-4 mb-4">
+        {/* Greeting + avatar */}
+        <div className="flex items-start justify-between mb-5">
           <div>
             <p
-              className="font-serif font-semibold leading-none"
-              style={{ fontSize: "64px", color: "var(--text-primary)", lineHeight: 1 }}
+              className="text-xs"
+              style={{
+                color: "rgba(255,255,255,0.5)",
+                fontFamily: "var(--font-inter)",
+              }}
             >
-              {weekSummary.pages}
+              {greeting}
             </p>
-            <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
-              pages read this week
-            </p>
+            <h1
+              className="font-serif font-semibold leading-none mt-0.5"
+              style={{ color: "#ffffff", fontSize: "30px", letterSpacing: "-0.01em" }}
+            >
+              {firstName}
+            </h1>
           </div>
-          <div className="flex flex-col items-end gap-1.5 pt-1">
-            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-              of {weekSummary.goal} pg
-            </p>
-            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>
-              {weekSummary.daysRemaining} days left
-            </p>
-            {weekSummary.penalty > 0 && (
-              <span
-                className="text-xs font-semibold px-2.5 py-1 rounded-full"
-                style={{ backgroundColor: "var(--penalty-bg)", color: "var(--penalty)" }}
-              >
-                {weekSummary.currency}{weekSummary.penalty} risk
-              </span>
-            )}
+          <div
+            className="flex items-center justify-center font-semibold text-base"
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: "50%",
+              background: "rgba(200,145,58,0.2)",
+              border: "2px solid rgba(200,145,58,0.45)",
+              color: "#ffffff",
+              fontFamily: "var(--font-inter)",
+            }}
+          >
+            {userInitial}
           </div>
         </div>
 
-        <PageStrip
-          pagesRead={weekSummary.pages}
-          weeklyGoal={weekSummary.goal}
-          completed={weekSummary.pages >= weekSummary.goal}
+        {/* Hero stat */}
+        <p
+          className="text-xs mb-1"
+          style={{
+            color: "rgba(255,255,255,0.5)",
+            fontFamily: "var(--font-inter)",
+          }}
+        >
+          This week you&apos;ve read
+        </p>
+        <p
+          className="font-serif font-semibold leading-none"
+          style={{
+            fontSize: "68px",
+            color: "#ffffff",
+            letterSpacing: "-0.03em",
+          }}
+        >
+          {weekSummary.pages}
+        </p>
+        <p
+          className="text-base mt-1"
+          style={{ color: "rgba(255,255,255,0.75)", fontFamily: "var(--font-inter)" }}
+        >
+          pages
+        </p>
+        {/* Amber underline */}
+        <div
+          style={{
+            width: 52,
+            height: 4,
+            backgroundColor: "#c8913a",
+            borderRadius: 2,
+            marginTop: 6,
+          }}
         />
+
+        {/* Progress bar */}
+        <div className="flex items-center gap-2 mt-4">
+          <div
+            className="flex-1 rounded-full overflow-hidden"
+            style={{ height: 4, backgroundColor: "rgba(255,255,255,0.12)" }}
+          >
+            <div
+              style={{
+                height: "100%",
+                width: `${pct}%`,
+                backgroundColor: "#c8913a",
+                borderRadius: "inherit",
+              }}
+            />
+          </div>
+          <span
+            className="text-[11px]"
+            style={{
+              color: "rgba(255,255,255,0.45)",
+              fontFamily: "var(--font-inter)",
+            }}
+          >
+            {pct}%
+          </span>
+        </div>
       </div>
 
-      {activeBooks.length > 0 && (
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
-            Reading now
-          </p>
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {activeBooks.map((book) => (
-              <Link
-                key={book.id}
-                href="/library"
-                className="flex items-center gap-2 px-3 py-2 rounded-full shrink-0 text-sm"
+      {/* ── Ivory panel ── */}
+      <div
+        className="relative flex flex-col gap-5 px-5 pt-6 flex-1"
+        style={{
+          backgroundColor: "#fdf5e6",
+          borderRadius: "28px 28px 0 0",
+          marginTop: -28,
+        }}
+      >
+        {/* Sticky note */}
+        {showStickyNote && (
+          <div
+            className="absolute"
+            style={{
+              top: -16,
+              right: 20,
+              backgroundColor: "#c8913a",
+              padding: "10px 14px",
+              transform: "rotate(1.8deg)",
+              boxShadow: "3px 4px 0 rgba(59,36,18,0.14)",
+            }}
+          >
+            <span
+              className="text-[11px] font-bold"
+              style={{ color: "#3b2412", fontFamily: "var(--font-inter)" }}
+            >
+              {weekSummary.penalty > 0
+                ? `${weekSummary.currency}${weekSummary.penalty} · `
+                : ""}
+              {weekSummary.daysRemaining}{" "}
+              {weekSummary.daysRemaining === 1 ? "day" : "days"} to go
+            </span>
+          </div>
+        )}
+
+        {/* Active Challenges section */}
+        {validLeaderboards.length > 0 ? (
+          <>
+            <div>
+              <p
+                className="text-[10px] font-semibold uppercase mb-3"
                 style={{
-                  backgroundColor: "var(--bg-card)",
-                  border: "1px solid var(--border-default)",
-                  color: "var(--text-secondary)",
+                  letterSpacing: "0.1em",
+                  color: "#9c826a",
+                  fontFamily: "var(--font-inter)",
                 }}
               >
-                {book.coverUrl ? (
-                  <img src={book.coverUrl} alt={book.title} className="w-5 h-7 object-cover rounded" />
-                ) : (
-                  <span>📗</span>
-                )}
-                <span className="line-clamp-1 max-w-[120px]">{book.title}</span>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
+                Active Challenge
+              </p>
 
-      {leaderboards.filter(Boolean).length > 0 ? (
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
-            My challenges
-          </p>
-          <div className="flex flex-col gap-3">
-            {leaderboards.filter(Boolean).map((c) => (
-              <ChallengeCard key={c!.id} id={c!.id} name={c!.name} members={c!.entries} />
-            ))}
+              {firstLb && (
+                <Link
+                  href={`/challenges/${firstLb.id}`}
+                  className="block rounded-[4px] p-4"
+                  style={{
+                    backgroundColor: "#fefaf2",
+                    boxShadow: "0 2px 12px rgba(59,36,18,0.07)",
+                  }}
+                >
+                  <div className="flex items-start justify-between mb-1">
+                    <p
+                      className="font-serif font-semibold"
+                      style={{ fontSize: 17, color: "#3b2412" }}
+                    >
+                      {firstLb.name}
+                    </p>
+                    {(() => {
+                      const myRank =
+                        firstLb.entries.findIndex((e) => e.user_id === userId) + 1;
+                      return myRank > 0 ? (
+                        <span
+                          className="text-[11px] font-bold px-1.5 py-0.5 shrink-0"
+                          style={{
+                            backgroundColor: "#3b2412",
+                            color: "#ffffff",
+                            borderRadius: 2,
+                            fontFamily: "var(--font-inter)",
+                          }}
+                        >
+                          #{myRank}
+                        </span>
+                      ) : null;
+                    })()}
+                  </div>
+                  <p
+                    className="text-[11px] mb-3"
+                    style={{ color: "#5a3e28", fontFamily: "var(--font-inter)" }}
+                  >
+                    {firstLb.entries.length} reader
+                    {firstLb.entries.length !== 1 ? "s" : ""}
+                  </p>
+
+                  {/* Mini leaderboard */}
+                  <div className="flex flex-col gap-2">
+                    {firstLb.entries.slice(0, 4).map((entry, i) => {
+                      const p = Math.min(
+                        1,
+                        entry.pages_this_week / entry.weekly_goal
+                      );
+                      const isMe = entry.user_id === userId;
+                      const isLeader = i === 0;
+                      const barColor = isLeader
+                        ? "#c8913a"
+                        : isMe
+                        ? "#7a4a1e"
+                        : "#9c826a";
+
+                      return (
+                        <div key={entry.user_id} className="flex items-center gap-2">
+                          <div
+                            className="flex items-center justify-center shrink-0 text-[10px] font-semibold"
+                            style={{
+                              width: 22,
+                              height: 22,
+                              borderRadius: "50%",
+                              backgroundColor: isMe
+                                ? "rgba(200,145,58,0.18)"
+                                : "#e4d8c4",
+                              color: isMe ? "#c8913a" : "#9c826a",
+                              fontFamily: "var(--font-inter)",
+                            }}
+                          >
+                            {entry.display_name[0]?.toUpperCase()}
+                          </div>
+                          <div
+                            className="flex-1 rounded-full overflow-hidden"
+                            style={{ height: 5, backgroundColor: "#dfd0b8" }}
+                          >
+                            <div
+                              style={{
+                                height: "100%",
+                                width: `${p * 100}%`,
+                                backgroundColor: barColor,
+                                borderRadius: "inherit",
+                              }}
+                            />
+                          </div>
+                          <span
+                            className="text-[11px] tabular-nums w-8 text-right"
+                            style={{
+                              color: isMe ? "#3b2412" : "#9c826a",
+                              fontWeight: isMe ? 600 : 400,
+                              fontFamily: "var(--font-inter)",
+                            }}
+                          >
+                            {entry.pages_this_week}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </Link>
+              )}
+
+              {/* Additional challenge cards */}
+              {validLeaderboards.length > 1 && (
+                <div className="flex flex-col gap-3 mt-3">
+                  {validLeaderboards.slice(1).map((c) => (
+                    <ChallengeCard
+                      key={c!.id}
+                      id={c!.id}
+                      name={c!.name}
+                      members={c!.entries}
+                      currentUserId={userId}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="flex flex-col items-center gap-4 py-12">
+            <p
+              className="font-serif text-lg text-center"
+              style={{ color: "#5a3e28" }}
+            >
+              Start a reading challenge with friends
+            </p>
+            <Link
+              href="/challenges/new"
+              className="px-5 py-3 rounded-[4px] text-sm font-semibold text-white"
+              style={{ backgroundColor: "#7a4a1e", fontFamily: "var(--font-inter)" }}
+            >
+              Create a challenge
+            </Link>
           </div>
-        </div>
-      ) : (
-        <div className="flex flex-col items-center gap-3 py-10">
-          <span className="text-4xl">📚</span>
-          <p className="font-serif text-lg text-center" style={{ color: "var(--text-secondary)" }}>
-            Start a challenge with friends
-          </p>
-          <Link
-            href="/challenges/new"
-            className="px-5 py-2.5 rounded-[10px] text-sm font-medium text-white"
-            style={{ backgroundColor: "var(--app-accent)" }}
-          >
-            Create a challenge
-          </Link>
-        </div>
-      )}
+        )}
+      </div>
 
       <HomeLogButton books={myBooks} userId={userId} />
     </div>

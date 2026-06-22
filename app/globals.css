@@ -8,9 +8,9 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-inter);
-  --font-serif: var(--font-lora);
+  --font-serif: var(--font-newsreader);
   --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-lora);
+  --font-heading: var(--font-newsreader);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -57,51 +57,61 @@
 }
 
 :root {
-  --background: #FAF7F2;
-  --foreground: #1C1309;
-  --card: #FFFFFF;
-  --card-foreground: #1C1309;
-  --popover: #FFFFFF;
-  --popover-foreground: #1C1309;
-  --primary: #7B3B52;
-  --primary-foreground: #FFFFFF;
-  --secondary: #F3EDE4;
-  --secondary-foreground: #1C1309;
-  --muted: #F3EDE4;
-  --muted-foreground: #A89080;
-  --accent: #F2E5E9;
-  --accent-foreground: #7B3B52;
-  --destructive: #B45309;
-  --border: #EDE4D9;
-  --input: #F3EDE4;
-  --ring: #7B3B52;
-  --radius: 0.75rem;
-  --sidebar: #FAF7F2;
-  --sidebar-foreground: #1C1309;
-  --sidebar-primary: #7B3B52;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #F2E5E9;
-  --sidebar-accent-foreground: #7B3B52;
-  --sidebar-border: #EDE4D9;
-  --sidebar-ring: #7B3B52;
+  /* Shadcn/ui tokens — espresso/amber palette */
+  --background: #fefaf2;
+  --foreground: #2c1a08;
+  --card: #fefaf2;
+  --card-foreground: #2c1a08;
+  --popover: #fefaf2;
+  --popover-foreground: #2c1a08;
+  --primary: #3b2412;
+  --primary-foreground: #ffffff;
+  --secondary: #fdf5e6;
+  --secondary-foreground: #2c1a08;
+  --muted: #fdf5e6;
+  --muted-foreground: #9c826a;
+  --accent: #fdf5e6;
+  --accent-foreground: #3b2412;
+  --destructive: #b45309;
+  --border: #dfd0b8;
+  --input: #fdf5e6;
+  --ring: #c8913a;
+  --radius: 0.25rem;
+  --sidebar: #fdf5e6;
+  --sidebar-foreground: #2c1a08;
+  --sidebar-primary: #3b2412;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #fdf5e6;
+  --sidebar-accent-foreground: #3b2412;
+  --sidebar-border: #dfd0b8;
+  --sidebar-ring: #c8913a;
 
   /* App design tokens */
-  --bg-base: #FAF7F2;
-  --bg-card: #FFFFFF;
-  --bg-subtle: #F3EDE4;
-  --bg-warm: #FDEEDE;
-  --app-accent: #7B3B52;
-  --app-accent-light: #F2E5E9;
-  --penalty: #B45309;
-  --penalty-bg: #FEF3C7;
-  --text-primary: #1C1309;
-  --text-secondary: #6B5B4E;
-  --text-muted: #A89080;
-  --border-default: #EDE4D9;
-  --border-strong: #D4C4B4;
+  --bg-base: #fefaf2;           /* cream — main screen bg */
+  --bg-card: #fefaf2;           /* cream — card bg */
+  --bg-subtle: #fdf5e6;         /* old-lace — panel bg, nav bg, inputs */
+  --bg-warm: #fdf5e6;
+  --app-accent: #c8913a;        /* amber — progress bars, active dot, highlights */
+  --app-accent-light: #fdf0d8;  /* amber tint — reaction pills, avatar placeholders */
+  --penalty: #b45309;
+  --penalty-bg: #fef3c7;
+  --text-primary: #2c1a08;      /* ink */
+  --text-secondary: #5a3e28;    /* walnut */
+  --text-muted: #9c826a;        /* driftwood */
+  --border-default: #dfd0b8;
+  --border-strong: #c8b49a;
 
-  --shadow-card: 0 2px 12px rgba(100, 60, 30, 0.07);
-  --shadow-drawer: 0 -4px 24px rgba(100, 60, 30, 0.10);
+  /* Named brand tokens (use inline when semantic var doesn't fit) */
+  --espresso: #3b2412;
+  --sienna: #7a4a1e;
+  --amber: #c8913a;
+  --old-lace: #fdf5e6;
+  --cream: #fefaf2;
+
+  --shadow-card: 0 2px 10px rgba(59, 36, 18, 0.06);
+  --shadow-card-md: 0 4px 20px rgba(59, 36, 18, 0.09);
+  --shadow-drawer: 0 -4px 24px rgba(59, 36, 18, 0.10);
+  --shadow-fab: 0 6px 20px rgba(122, 74, 30, 0.40);
 }
 
 @layer base {
@@ -130,7 +140,7 @@
 
 @layer utilities {
   .font-serif {
-    font-family: var(--font-lora), Georgia, serif;
+    font-family: var(--font-newsreader), Georgia, serif;
   }
   .font-sans {
     font-family: var(--font-inter), system-ui, sans-serif;
@@ -138,8 +148,14 @@
   .shadow-card {
     box-shadow: var(--shadow-card);
   }
+  .shadow-card-md {
+    box-shadow: var(--shadow-card-md);
+  }
   .shadow-drawer {
     box-shadow: var(--shadow-drawer);
+  }
+  .shadow-fab {
+    box-shadow: var(--shadow-fab);
   }
   .text-primary-color {
     color: var(--text-primary);

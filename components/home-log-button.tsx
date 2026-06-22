@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { LogSessionDrawer } from "@/components/log-session-drawer";
+import { Plus } from "lucide-react";
 
 interface Book {
   id: string;
@@ -22,17 +23,22 @@ export function HomeLogButton({ books }: HomeLogButtonProps) {
 
   return (
     <>
-      <div className="fixed left-0 right-0 flex justify-center pointer-events-none z-30" style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 88px)" }}>
+      <div
+        className="fixed pointer-events-none z-30"
+        style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 96px)", right: 20 }}
+      >
         <button
           onClick={() => setOpen(true)}
-          className="pointer-events-auto px-6 py-3 rounded-full font-serif font-semibold text-sm text-white shadow-lg transition-transform active:scale-95"
+          className="pointer-events-auto flex items-center justify-center rounded-full text-white transition-transform active:scale-95"
           style={{
-            backgroundColor: "var(--app-accent)",
-            width: "160px",
-            boxShadow: "0 4px 20px rgba(123, 59, 82, 0.35)",
+            width: 52,
+            height: 52,
+            backgroundColor: "var(--sienna)",
+            boxShadow: "var(--shadow-fab)",
           }}
+          aria-label="Log reading session"
         >
-          + Log session
+          <Plus size={22} strokeWidth={2.5} />
         </button>
       </div>
 

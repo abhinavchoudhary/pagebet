@@ -28,13 +28,21 @@ export default async function ChallengePage({
 
   const userId = session.user.id;
 
-  const [challenge] = await db.select().from(challenges).where(eq(challenges.id, id));
+  const [challenge] = await db
+    .select()
+    .from(challenges)
+    .where(eq(challenges.id, id));
   if (!challenge) notFound();
 
   const [membership] = await db
     .select({ joinedAt: challengeMembers.joinedAt })
     .from(challengeMembers)
-    .where(and(eq(challengeMembers.challengeId, id), eq(challengeMembers.userId, userId)));
+    .where(
+      and(
+        eq(challengeMembers.challengeId, id),
+        eq(challengeMembers.userId, userId)
+      )
+    );
 
   if (!membership) redirect("/");
 
@@ -51,7 +59,6 @@ export default async function ChallengePage({
 
   const now = new Date();
 
-  // This week leaderboard + all-time totals in parallel
   const [leaderboard, allTimeTotals, challengeBooks] = await Promise.all([
     Promise.all(
       members.map(async (m) => {
@@ -59,11 +66,16 @@ export default async function ChallengePage({
         const [creditSum] = await db
           .select({ total: sum(challengeSessionCredits.pagesCredited) })
           .from(challengeSessionCredits)
-          .where(and(
-            eq(challengeSessionCredits.challengeId, id),
-            eq(challengeSessionCredits.userId, m.userId),
-            eq(challengeSessionCredits.weekStart, weekStart.toISOString().split("T")[0])
-          ));
+          .where(
+            and(
+              eq(challengeSessionCredits.challengeId, id),
+              eq(challengeSessionCredits.userId, m.userId),
+              eq(
+                challengeSessionCredits.weekStart,
+                weekStart.toISOString().split("T")[0]
+              )
+            )
+          );
 
         const pagesThisWeek = Number(creditSum?.total ?? 0);
         const { penaltyExposure } = computePenalty({
@@ -112,8 +124,9 @@ export default async function ChallengePage({
       ),
   ]);
 
-  // Build lookup maps
-  const allTimePagesMap = Object.fromEntries(allTimeTotals.map((r) => [r.userId, Number(r.total ?? 0)]));
+  const allTimePagesMap = Object.fromEntries(
+    allTimeTotals.map((r) => [r.userId, Number(r.total ?? 0)])
+  );
 
   const booksByMember: Record<string, typeof challengeBooks> = {};
   for (const b of challengeBooks) {
@@ -124,168 +137,426 @@ export default async function ChallengePage({
   const isCreator = challenge.creatorId === userId;
   const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/join/${challenge.inviteToken}`;
 
-  const sortedLeaderboard = leaderboard.sort((a, b) => b.pages_this_week - a.pages_this_week);
+  const sortedLeaderboard = leaderboard.sort(
+    (a, b) => b.pages_this_week - a.pages_this_week
+  );
   const allTimeSorted = [...members].sort(
-    (a, b) => (allTimePagesMap[b.userId] ?? 0) - (allTimePagesMap[a.userId] ?? 0)
+    (a, b) =>
+      (allTimePagesMap[b.userId] ?? 0) - (allTimePagesMap[a.userId] ?? 0)
   );
 
+  const myEntry = sortedLeaderboard.find((e) => e.user_id === userId);
+  const pct =
+    myEntry && myEntry.weekly_goal > 0
+      ? Math.min(
+          100,
+          Math.round((myEntry.pages_this_week / myEntry.weekly_goal) * 100)
+        )
+      : 0;
+
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Link href="/"><ChevronLeft size={20} style={{ color: "var(--text-secondary)" }} /></Link>
-          <h1 className="font-serif text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
-            {challenge.name}
-          </h1>
-        </div>
-        {isCreator && (
-          <Link href={`/challenges/${id}/settings`}>
-            <Settings size={20} style={{ color: "var(--text-muted)" }} />
+    <div className="flex flex-col">
+      {/* ── Dark espresso header ── */}
+      <div
+        className="relative px-5 pt-5"
+        style={{ backgroundColor: "#3b2412", paddingBottom: "52px" }}
+      >
+        {/* Back row */}
+        <div className="flex items-center justify-between mb-5">
+          <Link
+            href="/"
+            className="flex items-center gap-1"
+            style={{ color: "rgba(255,255,255,0.6)" }}
+          >
+            <ChevronLeft size={18} />
+            <span
+              className="text-[13px]"
+              style={{ fontFamily: "var(--font-inter)" }}
+            >
+              Back
+            </span>
           </Link>
-        )}
-      </div>
+          {isCreator && (
+            <Link href={`/challenges/${id}/settings`}>
+              <Settings size={20} style={{ color: "rgba(255,255,255,0.6)" }} />
+            </Link>
+          )}
+        </div>
 
-      {challenge.description && (
-        <p className="text-sm leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-          {challenge.description}
-        </p>
-      )}
+        {/* Challenge title */}
+        <h1
+          className="font-serif font-semibold leading-tight"
+          style={{ fontSize: 28, color: "#ffffff" }}
+        >
+          {challenge.name}
+        </h1>
 
-      <div className="grid grid-cols-3 gap-3 p-4 rounded-[12px]"
-        style={{ backgroundColor: "var(--bg-card)", border: "1px solid var(--border-default)" }}>
-        <Stat label="Daily goal" value={`${challenge.dailyGoal} pg`} />
-        <Stat label="Weekly goal" value={`${challenge.weeklyGoal} pg`} />
-        <Stat label="Penalty" value={`${challenge.penaltyCurrency}${challenge.penaltyAmount}/pg`} />
-      </div>
-
-      {/* This week */}
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
-          This week
-        </p>
-        <Leaderboard entries={sortedLeaderboard} penaltyCurrency={challenge.penaltyCurrency} currentUserId={userId} />
-      </div>
-
-      {/* All-time stats */}
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
-          All-time
-        </p>
-        <div className="flex flex-col gap-2">
-          {allTimeSorted.map((m, i) => {
-            const total = allTimePagesMap[m.userId] ?? 0;
-            const daysSinceJoined = Math.max(1, Math.ceil((now.getTime() - m.joinedAt.getTime()) / 86400000));
-            const avgDaily = total > 0 ? Math.round(total / daysSinceJoined) : 0;
-            const isMe = m.userId === userId;
-
-            return (
-              <div key={m.userId} className="flex items-center gap-3 p-3 rounded-[12px]"
-                style={{
-                  backgroundColor: isMe ? "var(--app-accent-light)" : "var(--bg-card)",
-                  border: `1px solid ${isMe ? "var(--app-accent)" : "var(--border-default)"}`,
-                }}>
-                <span className="text-sm font-medium w-5 text-center tabular-nums" style={{ color: "var(--text-muted)" }}>
-                  {i + 1}
-                </span>
-                {m.avatarUrl ? (
-                  <img src={m.avatarUrl} alt={m.displayName ?? ""} className="w-8 h-8 rounded-full object-cover shrink-0" />
-                ) : (
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold shrink-0"
-                    style={{ backgroundColor: "var(--bg-subtle)", color: "var(--text-secondary)" }}>
-                    {m.displayName?.[0]?.toUpperCase()}
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>
-                    {m.displayName?.split(" ")[0]}{isMe ? " (you)" : ""}
-                  </p>
-                  <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>{avgDaily} pg/day avg</p>
-                </div>
-                <span className="text-sm font-semibold tabular-nums" style={{ color: "var(--text-primary)" }}>
-                  {total.toLocaleString()}
-                </span>
-                <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>pg</span>
-              </div>
-            );
-          })}
+        {/* Metadata row */}
+        <div
+          className="flex items-center gap-3 mt-2"
+          style={{ fontFamily: "var(--font-inter)" }}
+        >
+          <span className="text-[13px] font-bold" style={{ color: "#c8913a" }}>
+            {challenge.penaltyCurrency}
+            {Number(challenge.penaltyAmount)}/pg
+          </span>
+          <span
+            className="text-[13px]"
+            style={{ color: "rgba(255,255,255,0.5)" }}
+          >
+            {members.length} readers
+          </span>
+          <span
+            className="text-[13px]"
+            style={{ color: "rgba(255,255,255,0.5)" }}
+          >
+            {challenge.weeklyGoal} pg/week goal
+          </span>
         </div>
       </div>
 
-      {/* Bookshelves */}
-      {Object.keys(booksByMember).length > 0 && (
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
-            Bookshelves
+      {/* ── Ivory panel ── */}
+      <div
+        className="flex flex-col gap-5 px-5 pt-6 flex-1"
+        style={{
+          backgroundColor: "#fdf5e6",
+          borderRadius: "28px 28px 0 0",
+          marginTop: -28,
+        }}
+      >
+        {/* Your progress card */}
+        {myEntry && (
+          <div>
+            <p
+              className="text-[10px] font-semibold uppercase mb-3"
+              style={{
+                letterSpacing: "0.1em",
+                color: "#9c826a",
+                fontFamily: "var(--font-inter)",
+              }}
+            >
+              Your Progress This Week
+            </p>
+            <div
+              className="rounded-[4px] p-4"
+              style={{
+                backgroundColor: "#fefaf2",
+                boxShadow: "0 4px 20px rgba(59,36,18,0.09)",
+              }}
+            >
+              <div className="flex items-end justify-between mb-3">
+                <div className="flex items-baseline gap-2">
+                  <span
+                    className="font-serif font-semibold"
+                    style={{ fontSize: 38, color: "#3b2412", lineHeight: 1 }}
+                  >
+                    {myEntry.pages_this_week}
+                  </span>
+                  <span
+                    className="text-[15px]"
+                    style={{ color: "#5a3e28", fontFamily: "var(--font-inter)" }}
+                  >
+                    / {myEntry.weekly_goal} pg
+                  </span>
+                </div>
+                <span
+                  className="text-sm font-bold"
+                  style={{ color: "#7a4a1e", fontFamily: "var(--font-inter)" }}
+                >
+                  {pct}%
+                </span>
+              </div>
+              <div
+                className="rounded-full overflow-hidden mb-3"
+                style={{ height: 8, backgroundColor: "#dfd0b8" }}
+              >
+                <div
+                  style={{
+                    height: "100%",
+                    width: `${pct}%`,
+                    backgroundColor: "#c8913a",
+                    borderRadius: "inherit",
+                  }}
+                />
+              </div>
+              {myEntry.pages_this_week < myEntry.weekly_goal && (
+                <p
+                  className="text-xs"
+                  style={{ color: "#5a3e28", fontFamily: "var(--font-inter)" }}
+                >
+                  Need{" "}
+                  {myEntry.weekly_goal - myEntry.pages_this_week} more pages
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {challenge.description && (
+          <p
+            className="text-sm leading-relaxed"
+            style={{
+              color: "var(--text-secondary)",
+              fontFamily: "var(--font-inter)",
+            }}
+          >
+            {challenge.description}
           </p>
-          <div className="flex flex-col gap-4">
-            {members.map((m) => {
-              const memberBooks = booksByMember[m.userId];
-              if (!memberBooks?.length) return null;
-              const reading = memberBooks.filter((b) => !b.finished);
-              const finished = memberBooks.filter((b) => b.finished);
+        )}
+
+        {/* This week leaderboard */}
+        <div>
+          <p
+            className="text-[10px] font-semibold uppercase mb-3"
+            style={{
+              letterSpacing: "0.1em",
+              color: "#9c826a",
+              fontFamily: "var(--font-inter)",
+            }}
+          >
+            Group Standings
+          </p>
+          <Leaderboard
+            entries={sortedLeaderboard}
+            penaltyCurrency={challenge.penaltyCurrency}
+            currentUserId={userId}
+          />
+        </div>
+
+        {/* All-time stats */}
+        <div>
+          <p
+            className="text-[10px] font-semibold uppercase mb-3"
+            style={{
+              letterSpacing: "0.1em",
+              color: "#9c826a",
+              fontFamily: "var(--font-inter)",
+            }}
+          >
+            All-time
+          </p>
+          <div
+            className="rounded-[4px] overflow-hidden"
+            style={{ border: "1px solid var(--border-default)" }}
+          >
+            {allTimeSorted.map((m, i) => {
+              const total = allTimePagesMap[m.userId] ?? 0;
+              const daysSinceJoined = Math.max(
+                1,
+                Math.ceil(
+                  (now.getTime() - m.joinedAt.getTime()) / 86400000
+                )
+              );
+              const avgDaily =
+                total > 0 ? Math.round(total / daysSinceJoined) : 0;
               const isMe = m.userId === userId;
 
               return (
-                <div key={m.userId}>
-                  <div className="flex items-center gap-2 mb-2">
-                    {m.avatarUrl ? (
-                      <img src={m.avatarUrl} alt={m.displayName ?? ""} className="w-5 h-5 rounded-full object-cover" />
-                    ) : (
-                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold"
-                        style={{ backgroundColor: "var(--bg-subtle)", color: "var(--text-secondary)" }}>
-                        {m.displayName?.[0]?.toUpperCase()}
-                      </div>
-                    )}
-                    <p className="text-xs font-medium" style={{ color: "var(--text-secondary)" }}>
-                      {m.displayName?.split(" ")[0]}{isMe ? " (you)" : ""}
+                <div
+                  key={m.userId}
+                  className="flex items-center gap-3 px-4 py-3"
+                  style={{
+                    backgroundColor: isMe ? "var(--cream)" : "var(--old-lace)",
+                    borderTop:
+                      i === 0
+                        ? "none"
+                        : isMe
+                        ? "2px solid #c8913a"
+                        : "1px solid var(--border-default)",
+                    borderLeft: isMe ? "3px solid #c8913a" : "none",
+                  }}
+                >
+                  <span
+                    className="text-sm tabular-nums w-5 text-center shrink-0"
+                    style={{
+                      color: "var(--text-muted)",
+                      fontFamily: "var(--font-inter)",
+                    }}
+                  >
+                    {i + 1}
+                  </span>
+                  {m.avatarUrl ? (
+                    <img
+                      src={m.avatarUrl}
+                      alt={m.displayName ?? ""}
+                      className="w-7 h-7 rounded-full object-cover shrink-0"
+                    />
+                  ) : (
+                    <div
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
+                      style={{
+                        backgroundColor: "#e4d8c4",
+                        color: "var(--text-muted)",
+                      }}
+                    >
+                      {m.displayName?.[0]?.toUpperCase()}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p
+                      className="text-sm truncate"
+                      style={{
+                        color: isMe ? "var(--espresso)" : "var(--text-primary)",
+                        fontWeight: isMe ? 700 : 500,
+                        fontFamily: "var(--font-inter)",
+                      }}
+                    >
+                      {m.displayName?.split(" ")[0]}
+                      {isMe ? " (you)" : ""}
+                    </p>
+                    <p
+                      className="text-[11px]"
+                      style={{
+                        color: "var(--text-muted)",
+                        fontFamily: "var(--font-inter)",
+                      }}
+                    >
+                      {avgDaily} pg/day avg
                     </p>
                   </div>
-                  <div className="flex gap-2 overflow-x-auto pb-1">
-                    {reading.map((b) => (
-                      <BookCover key={b.bookId} title={b.title} coverUrl={b.coverUrl} />
-                    ))}
-                    {finished.map((b) => (
-                      <BookCover key={b.bookId} title={b.title} coverUrl={b.coverUrl} faded />
-                    ))}
-                  </div>
+                  <span
+                    className="text-sm font-semibold tabular-nums"
+                    style={{
+                      color: isMe ? "var(--espresso)" : "var(--text-primary)",
+                      fontFamily: "var(--font-inter)",
+                    }}
+                  >
+                    {total.toLocaleString()}
+                  </span>
+                  <span
+                    className="text-[11px]"
+                    style={{
+                      color: "var(--text-muted)",
+                      fontFamily: "var(--font-inter)",
+                    }}
+                  >
+                    pg
+                  </span>
                 </div>
               );
             })}
           </div>
         </div>
-      )}
 
-      {challenge.inviteActive && (
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
-            Invite link
-          </p>
-          <InviteLinkCopy url={inviteUrl} />
-        </div>
-      )}
+        {/* Bookshelves */}
+        {Object.keys(booksByMember).length > 0 && (
+          <div>
+            <p
+              className="text-[10px] font-semibold uppercase mb-3"
+              style={{
+                letterSpacing: "0.1em",
+                color: "#9c826a",
+                fontFamily: "var(--font-inter)",
+              }}
+            >
+              Bookshelves
+            </p>
+            <div className="flex flex-col gap-4">
+              {members.map((m) => {
+                const memberBooks = booksByMember[m.userId];
+                if (!memberBooks?.length) return null;
+                const readingBooks = memberBooks.filter((b) => !b.finished);
+                const finishedBooks = memberBooks.filter((b) => b.finished);
+                const isMe = m.userId === userId;
+
+                return (
+                  <div key={m.userId}>
+                    <div className="flex items-center gap-2 mb-2">
+                      {m.avatarUrl ? (
+                        <img
+                          src={m.avatarUrl}
+                          alt={m.displayName ?? ""}
+                          className="w-5 h-5 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div
+                          className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold"
+                          style={{
+                            backgroundColor: "#e4d8c4",
+                            color: "var(--text-muted)",
+                          }}
+                        >
+                          {m.displayName?.[0]?.toUpperCase()}
+                        </div>
+                      )}
+                      <p
+                        className="text-xs font-medium"
+                        style={{
+                          color: "var(--text-secondary)",
+                          fontFamily: "var(--font-inter)",
+                        }}
+                      >
+                        {m.displayName?.split(" ")[0]}
+                        {isMe ? " (you)" : ""}
+                      </p>
+                    </div>
+                    <div className="flex gap-2 overflow-x-auto pb-1">
+                      {readingBooks.map((b) => (
+                        <BookCover
+                          key={b.bookId}
+                          title={b.title}
+                          coverUrl={b.coverUrl}
+                        />
+                      ))}
+                      {finishedBooks.map((b) => (
+                        <BookCover
+                          key={b.bookId}
+                          title={b.title}
+                          coverUrl={b.coverUrl}
+                          faded
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {challenge.inviteActive && (
+          <div>
+            <p
+              className="text-[10px] font-semibold uppercase mb-2"
+              style={{
+                letterSpacing: "0.1em",
+                color: "#9c826a",
+                fontFamily: "var(--font-inter)",
+              }}
+            >
+              Invite link
+            </p>
+            <InviteLinkCopy url={inviteUrl} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex flex-col gap-0.5">
-      <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>{label}</p>
-      <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{value}</p>
-    </div>
-  );
-}
-
-function BookCover({ title, coverUrl, faded }: { title: string; coverUrl: string | null; faded?: boolean }) {
+function BookCover({
+  title,
+  coverUrl,
+  faded,
+}: {
+  title: string;
+  coverUrl: string | null;
+  faded?: boolean;
+}) {
   return (
     <div className="shrink-0 w-12" style={{ opacity: faded ? 0.5 : 1 }}>
       {coverUrl ? (
-        <img src={coverUrl} alt={title} className="w-12 rounded-[6px] object-cover shadow-sm" style={{ aspectRatio: "2/3" }} />
+        <img
+          src={coverUrl}
+          alt={title}
+          className="w-12 rounded-[4px] object-cover shadow-sm"
+          style={{ aspectRatio: "2/3" }}
+        />
       ) : (
-        <div className="w-12 rounded-[6px] flex items-center justify-center"
-          style={{ aspectRatio: "2/3", backgroundColor: "var(--app-accent-light)" }}>
-          <span className="text-base">📖</span>
-        </div>
+        <div
+          className="w-12 rounded-[4px]"
+          style={{ aspectRatio: "2/3", backgroundColor: "var(--espresso)" }}
+        />
       )}
     </div>
   );

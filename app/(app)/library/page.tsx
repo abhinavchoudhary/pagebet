@@ -22,9 +22,12 @@ export default async function LibraryPage() {
   const finished = allBooks.filter((b) => b.finished);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 px-4 pt-6">
       <div className="flex items-center justify-between">
-        <h1 className="font-serif text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
+        <h1
+          className="font-serif font-semibold"
+          style={{ fontSize: 24, color: "var(--espresso)" }}
+        >
           My Library
         </h1>
         <AddBookButton />
@@ -32,8 +35,10 @@ export default async function LibraryPage() {
 
       {allBooks.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-20">
-          <span className="text-4xl">📚</span>
-          <p className="font-serif text-lg text-center" style={{ color: "var(--text-secondary)" }}>
+          <p
+            className="font-serif text-lg text-center"
+            style={{ color: "var(--text-secondary)" }}
+          >
             Add your first book to get started
           </p>
         </div>
@@ -41,22 +46,40 @@ export default async function LibraryPage() {
         <>
           {reading.length > 0 && (
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
+              <p
+                className="text-[10px] font-semibold uppercase mb-3"
+                style={{
+                  letterSpacing: "0.1em",
+                  color: "var(--text-muted)",
+                  fontFamily: "var(--font-inter)",
+                }}
+              >
                 Reading now
               </p>
               <div className="grid grid-cols-3 gap-3">
-                {reading.map((book) => <BookTile key={book.id} book={book} />)}
+                {reading.map((book) => (
+                  <BookTile key={book.id} book={book} />
+                ))}
               </div>
             </div>
           )}
 
           {finished.length > 0 && (
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
+              <p
+                className="text-[10px] font-semibold uppercase mb-3"
+                style={{
+                  letterSpacing: "0.1em",
+                  color: "var(--text-muted)",
+                  fontFamily: "var(--font-inter)",
+                }}
+              >
                 Finished
               </p>
               <div className="grid grid-cols-3 gap-3 opacity-60">
-                {finished.map((book) => <BookTile key={book.id} book={book} />)}
+                {finished.map((book) => (
+                  <BookTile key={book.id} book={book} />
+                ))}
               </div>
             </div>
           )}
@@ -73,18 +96,19 @@ function BookTile({ book }: { book: Book }) {
         <img
           src={book.coverUrl}
           alt={book.title}
-          className="w-full rounded-[8px] object-cover shadow-sm"
+          className="w-full rounded-[4px] object-cover shadow-sm"
           style={{ aspectRatio: "2/3" }}
         />
       ) : (
         <div
-          className="w-full rounded-[8px] flex items-center justify-center"
-          style={{ aspectRatio: "2/3", backgroundColor: "var(--app-accent-light)" }}
-        >
-          <span className="text-2xl">📖</span>
-        </div>
+          className="w-full rounded-[4px]"
+          style={{ aspectRatio: "2/3", backgroundColor: "var(--espresso)" }}
+        />
       )}
-      <p className="text-xs leading-tight line-clamp-2" style={{ color: "var(--text-secondary)" }}>
+      <p
+        className="text-xs leading-tight line-clamp-2"
+        style={{ color: "var(--text-secondary)", fontFamily: "var(--font-inter)" }}
+      >
         {book.title}
       </p>
     </div>

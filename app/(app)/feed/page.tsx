@@ -24,11 +24,15 @@ export default async function FeedPage() {
 
   if (memberships.length === 0) {
     return (
-      <div className="flex flex-col items-center gap-3 py-20">
-        <span className="text-4xl">📖</span>
-        <p className="font-serif text-lg text-center" style={{ color: "var(--text-secondary)" }}>
-          The story begins when someone logs a session
-        </p>
+      <div className="px-4 pt-6 flex flex-col gap-5">
+        <h1 className="font-serif font-semibold" style={{ fontSize: 24, color: "var(--espresso)" }}>
+          Feed
+        </h1>
+        <div className="flex flex-col items-center gap-3 py-20">
+          <p className="font-serif text-lg text-center" style={{ color: "var(--text-secondary)" }}>
+            The story begins when someone logs a session
+          </p>
+        </div>
       </div>
     );
   }
@@ -82,14 +86,15 @@ export default async function FeedPage() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <h1 className="font-serif text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
-        Activity
-      </h1>
+    <div className="flex flex-col gap-5 px-4 pt-6">
+      <div className="flex items-center justify-between">
+        <h1 className="font-serif font-semibold" style={{ fontSize: 24, color: "var(--espresso)" }}>
+          Feed
+        </h1>
+      </div>
 
       {sessions.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-16">
-          <span className="text-4xl">📖</span>
           <p className="font-serif text-lg text-center" style={{ color: "var(--text-secondary)" }}>
             The story begins when someone logs a session
           </p>

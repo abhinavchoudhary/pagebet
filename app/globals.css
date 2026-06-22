@@ -118,6 +118,14 @@
   body {
     @apply min-h-full;
   }
+  button, a {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:not(:disabled):active {
+    opacity: 0.72;
+    transform: scale(0.97);
+    transition: opacity 60ms ease, transform 60ms ease;
+  }
 }
 
 @layer utilities {

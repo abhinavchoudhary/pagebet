@@ -26,7 +26,7 @@ export function BottomNav() {
             <Link
               key={href}
               href={href}
-              className="flex flex-col items-center gap-0.5 min-w-[48px] py-1"
+              className="flex flex-col items-center gap-0.5 min-w-[48px] py-1 transition-all active:scale-[0.90] active:opacity-70"
             >
               <Icon
                 size={22}

@@ -66,7 +66,7 @@ export default async function ProfilePage() {
   const finished = allBooks.filter((b) => b.finished);
 
   return (
-    <div className="flex flex-col gap-6 px-4 pt-6">
+    <div className="flex flex-col gap-6 px-4" style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 24px)" }}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1

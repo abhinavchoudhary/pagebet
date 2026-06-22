@@ -24,7 +24,7 @@ export default async function FeedPage() {
 
   if (memberships.length === 0) {
     return (
-      <div className="px-4 pt-6 flex flex-col gap-5">
+      <div className="px-4 flex flex-col gap-5" style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 24px)" }}>
         <h1 className="font-serif font-semibold" style={{ fontSize: 24, color: "var(--espresso)" }}>
           Feed
         </h1>
@@ -86,7 +86,7 @@ export default async function FeedPage() {
   }
 
   return (
-    <div className="flex flex-col gap-5 px-4 pt-6">
+    <div className="flex flex-col gap-5 px-4" style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 24px)" }}>
       <div className="flex items-center justify-between">
         <h1 className="font-serif font-semibold" style={{ fontSize: 24, color: "var(--espresso)" }}>
           Feed

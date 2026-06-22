@@ -77,7 +77,7 @@ export default function ChallengeSettingsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 px-5 pt-6 pb-10">
+    <div className="flex flex-col gap-6 px-5 pb-10" style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 24px)" }}>
       <div className="flex items-center gap-2">
         <Link href={`/challenges/${id}`}>
           <ChevronLeft size={20} style={{ color: "var(--text-secondary)" }} />

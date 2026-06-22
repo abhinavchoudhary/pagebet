@@ -17,35 +17,19 @@ export default async function FeedPage() {
 
   const userId = session.user.id;
 
-  const memberships = await db
+  // Subquery: challenge IDs the current user belongs to
+  const myChallengIds = db
     .select({ challengeId: challengeMembers.challengeId })
     .from(challengeMembers)
     .where(eq(challengeMembers.userId, userId));
 
-  if (memberships.length === 0) {
-    return (
-      <div className="px-4 flex flex-col gap-5" style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 24px)" }}>
-        <h1 className="font-serif font-semibold" style={{ fontSize: 24, color: "var(--espresso)" }}>
-          Feed
-        </h1>
-        <div className="flex flex-col items-center gap-3 py-20">
-          <p className="font-serif text-lg text-center" style={{ color: "var(--text-secondary)" }}>
-            The story begins when someone logs a session
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  const challengeIds = memberships.map((m) => m.challengeId);
-
-  const peerMemberships = await db
-    .select({ userId: challengeMembers.userId })
+  // Subquery: all user IDs in those challenges (includes self)
+  const peerUserIds = db
+    .selectDistinct({ userId: challengeMembers.userId })
     .from(challengeMembers)
-    .where(inArray(challengeMembers.challengeId, challengeIds));
+    .where(inArray(challengeMembers.challengeId, myChallengIds));
 
-  const peerIds = [...new Set(peerMemberships.map((m) => m.userId))];
-
+  // Single query: sessions from all peers (3 sequential queries → 1)
   const sessions = await db
     .select({
       id: readingSessions.id,
@@ -61,7 +45,7 @@ export default async function FeedPage() {
     .from(readingSessions)
     .innerJoin(books, eq(readingSessions.bookId, books.id))
     .innerJoin(users, eq(readingSessions.userId, users.id))
-    .where(inArray(readingSessions.userId, peerIds))
+    .where(inArray(readingSessions.userId, peerUserIds))
     .orderBy(desc(readingSessions.loggedAt))
     .limit(50);
 

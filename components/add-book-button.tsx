@@ -1,37 +1,26 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { Plus, X } from "lucide-react";
 import { BookSearch } from "@/components/book-search";
-import { createClient } from "@/lib/supabase/client";
+import { addBook } from "@/lib/actions/books";
 import type { BookResult } from "@/lib/books";
 
-interface AddBookButtonProps {
-  userId: string;
-}
-
-export function AddBookButton({ userId }: AddBookButtonProps) {
+export function AddBookButton() {
   const [open, setOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const supabase = createClient();
+  const [pending, startTransition] = useTransition();
 
-  async function handleSelect(book: BookResult) {
-    setSaving(true);
-    try {
-      await supabase.from("books").upsert({
-        user_id: userId,
-        google_books_id: book.id,
+  function handleSelect(book: BookResult) {
+    startTransition(async () => {
+      await addBook({
+        googleBooksId: book.id,
         title: book.title,
         authors: book.authors,
-        cover_url: book.coverUrl,
-        total_pages: book.pageCount,
-      }, { onConflict: "user_id,google_books_id" });
-
+        coverUrl: book.coverUrl,
+        pageCount: book.pageCount,
+      });
       setOpen(false);
-      window.location.reload();
-    } finally {
-      setSaving(false);
-    }
+    });
   }
 
   return (
@@ -57,10 +46,8 @@ export function AddBookButton({ userId }: AddBookButtonProps) {
           </div>
           <div className="flex-1 overflow-y-auto p-4">
             <BookSearch onSelect={handleSelect} />
-            {saving && (
-              <p className="text-sm text-center mt-4" style={{ color: "var(--text-muted)" }}>
-                Saving…
-              </p>
+            {pending && (
+              <p className="text-sm text-center mt-4" style={{ color: "var(--text-muted)" }}>Saving…</p>
             )}
           </div>
         </div>

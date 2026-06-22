@@ -1,9 +1,19 @@
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, Settings } from "lucide-react";
+import { db } from "@/lib/db";
+import {
+  challenges,
+  challengeMembers,
+  challengeSessionCredits,
+  users,
+} from "@/lib/db/schema";
+import { eq, and, sum } from "drizzle-orm";
 import { Leaderboard } from "@/components/leaderboard";
 import { InviteLinkCopy } from "@/components/invite-link-copy";
+import { getRollingWeek } from "@/lib/rolling-week";
+import { computePenalty } from "@/lib/penalty";
 
 export default async function ChallengePage({
   params,
@@ -11,33 +21,78 @@ export default async function ChallengePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login");
 
-  const { data: challenge } = await supabase
-    .from("challenges")
-    .select("*")
-    .eq("id", id)
-    .single();
+  const userId = session.user.id;
+
+  const [challenge] = await db
+    .select()
+    .from(challenges)
+    .where(eq(challenges.id, id));
 
   if (!challenge) notFound();
 
-  const { data: membership } = await supabase
-    .from("challenge_members")
-    .select("joined_at")
-    .eq("challenge_id", id)
-    .eq("user_id", user.id)
-    .single();
+  const [membership] = await db
+    .select({ joinedAt: challengeMembers.joinedAt })
+    .from(challengeMembers)
+    .where(
+      and(
+        eq(challengeMembers.challengeId, id),
+        eq(challengeMembers.userId, userId)
+      )
+    );
 
   if (!membership) redirect("/");
 
-  const { data: leaderboard } = await supabase.rpc("get_leaderboard", {
-    p_challenge_id: id,
-  });
+  const members = await db
+    .select({
+      userId: challengeMembers.userId,
+      displayName: users.name,
+      avatarUrl: users.image,
+      joinedAt: challengeMembers.joinedAt,
+    })
+    .from(challengeMembers)
+    .innerJoin(users, eq(challengeMembers.userId, users.id))
+    .where(eq(challengeMembers.challengeId, id));
 
-  const isCreator = challenge.creator_id === user.id;
-  const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/join/${challenge.invite_token}`;
+  const now = new Date();
+
+  const leaderboard = await Promise.all(
+    members.map(async (m) => {
+      const { weekStart } = getRollingWeek(m.joinedAt, now);
+      const [creditSum] = await db
+        .select({ total: sum(challengeSessionCredits.pagesCredited) })
+        .from(challengeSessionCredits)
+        .where(
+          and(
+            eq(challengeSessionCredits.challengeId, id),
+            eq(challengeSessionCredits.userId, m.userId),
+            eq(challengeSessionCredits.weekStart, weekStart.toISOString().split("T")[0])
+          )
+        );
+
+      const pagesThisWeek = Number(creditSum?.total ?? 0);
+      const { penaltyExposure } = computePenalty({
+        weeklyGoal: challenge.weeklyGoal,
+        pagesThisWeek,
+        penaltyAmount: Number(challenge.penaltyAmount),
+        carryOver: challenge.carryOver,
+      });
+
+      return {
+        user_id: m.userId,
+        display_name: m.displayName ?? "Reader",
+        avatar_url: m.avatarUrl ?? null,
+        pages_this_week: pagesThisWeek,
+        weekly_goal: challenge.weeklyGoal,
+        penalty_exposure: penaltyExposure,
+      };
+    })
+  );
+
+  const isCreator = challenge.creatorId === userId;
+  const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/join/${challenge.inviteToken}`;
 
   return (
     <div className="flex flex-col gap-6">
@@ -67,12 +122,9 @@ export default async function ChallengePage({
         className="grid grid-cols-3 gap-3 p-4 rounded-[12px]"
         style={{ backgroundColor: "var(--bg-card)", border: "1px solid var(--border-default)" }}
       >
-        <Stat label="Daily goal" value={`${challenge.daily_goal} pg`} />
-        <Stat label="Weekly goal" value={`${challenge.weekly_goal} pg`} />
-        <Stat
-          label="Penalty"
-          value={`${challenge.penalty_currency}${challenge.penalty_amount}/pg`}
-        />
+        <Stat label="Daily goal" value={`${challenge.dailyGoal} pg`} />
+        <Stat label="Weekly goal" value={`${challenge.weeklyGoal} pg`} />
+        <Stat label="Penalty" value={`${challenge.penaltyCurrency}${challenge.penaltyAmount}/pg`} />
       </div>
 
       <div>
@@ -80,20 +132,13 @@ export default async function ChallengePage({
           This week
         </p>
         <Leaderboard
-          entries={(leaderboard ?? []).map((e) => ({
-            user_id: e.user_id,
-            display_name: e.display_name,
-            avatar_url: e.avatar_url,
-            pages_this_week: Number(e.pages_this_week),
-            weekly_goal: e.weekly_goal,
-            penalty_exposure: Number(e.penalty_exposure),
-          }))}
-          penaltyCurrency={challenge.penalty_currency}
-          currentUserId={user.id}
+          entries={leaderboard.sort((a, b) => b.pages_this_week - a.pages_this_week)}
+          penaltyCurrency={challenge.penaltyCurrency}
+          currentUserId={userId}
         />
       </div>
 
-      {challenge.invite_active && (
+      {challenge.inviteActive && (
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: "var(--text-muted)" }}>
             Invite link
@@ -108,12 +153,8 @@ export default async function ChallengePage({
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-        {label}
-      </p>
-      <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-        {value}
-      </p>
+      <p className="text-[11px]" style={{ color: "var(--text-muted)" }}>{label}</p>
+      <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>{value}</p>
     </div>
   );
 }

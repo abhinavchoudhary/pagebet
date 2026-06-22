@@ -1,105 +1,79 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { ChevronLeft, RefreshCw, Trash2 } from "lucide-react";
 import Link from "next/link";
+import {
+  updateChallenge,
+  regenerateInviteToken,
+  removeMember,
+  archiveChallenge,
+} from "@/lib/actions/challenges";
 
-function generateToken(): string {
-  return Array.from(crypto.getRandomValues(new Uint8Array(12)))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+interface Member {
+  userId: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+interface ChallengeData {
+  name: string;
+  description: string;
+  dailyGoal: number;
+  penaltyAmount: number;
+  penaltyCurrency: string;
+  carryOver: boolean;
+  inviteActive: boolean;
+  isCreator: boolean;
+  members: Member[];
+  currentUserId: string;
 }
 
 export default function ChallengeSettingsPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const supabase = createClient();
-
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [dailyGoal, setDailyGoal] = useState(5);
-  const [penaltyAmount, setPenaltyAmount] = useState(10);
-  const [penaltyCurrency, setPenaltyCurrency] = useState("₹");
-  const [carryOver, setCarryOver] = useState(false);
-  const [inviteActive, setInviteActive] = useState(true);
-  const [members, setMembers] = useState<Array<{ user_id: string; display_name: string; avatar_url: string | null }>>([]);
-  const [saving, setSaving] = useState(false);
-  const [userId, setUserId] = useState("");
+  const [data, setData] = useState<ChallengeData | null>(null);
+  const [saving, startSaving] = useTransition();
 
   useEffect(() => {
-    async function load() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      setUserId(user.id);
-
-      const { data: c } = await supabase.from("challenges").select("*").eq("id", id).single();
-      if (!c || c.creator_id !== user.id) {
-        router.push(`/challenges/${id}`);
-        return;
-      }
-
-      setName(c.name);
-      setDescription(c.description ?? "");
-      setDailyGoal(c.daily_goal);
-      setPenaltyAmount(Number(c.penalty_amount));
-      setPenaltyCurrency(c.penalty_currency);
-      setCarryOver(c.carry_over);
-      setInviteActive(c.invite_active);
-
-      const { data: memberships } = await supabase
-        .from("challenge_members")
-        .select("user_id, profiles(display_name, avatar_url)")
-        .eq("challenge_id", id);
-
-      setMembers(
-        (memberships ?? []).map((m) => ({
-          user_id: m.user_id,
-          display_name: (m.profiles as Record<string, unknown>)?.display_name as string ?? "Unknown",
-          avatar_url: (m.profiles as Record<string, unknown>)?.avatar_url as string ?? null,
-        }))
-      );
-    }
-    load();
+    fetch(`/api/challenges/${id}/settings-data`)
+      .then((r) => r.json())
+      .then(setData);
   }, [id]);
 
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    await supabase.from("challenges").update({
-      name,
-      description: description || null,
-      daily_goal: dailyGoal,
-      weekly_goal: dailyGoal * 7,
-      penalty_amount: penaltyAmount,
-      penalty_currency: penaltyCurrency,
-      carry_over: carryOver,
-      invite_active: inviteActive,
-    }).eq("id", id);
-    setSaving(false);
+  if (!data) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Loading…</p>
+      </div>
+    );
+  }
+
+  if (!data.isCreator) {
     router.push(`/challenges/${id}`);
+    return null;
   }
 
-  async function regenerateToken() {
-    const token = generateToken();
-    await supabase.from("challenges").update({ invite_token: token }).eq("id", id);
-    router.refresh();
+  async function handleSave(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!data) return;
+    startSaving(async () => {
+      await updateChallenge(id, {
+        name: data.name,
+        description: data.description,
+        dailyGoal: data.dailyGoal,
+        penaltyAmount: data.penaltyAmount,
+        penaltyCurrency: data.penaltyCurrency,
+        carryOver: data.carryOver,
+        inviteActive: data.inviteActive,
+      });
+      router.push(`/challenges/${id}`);
+    });
   }
 
-  async function removeMember(memberId: string) {
-    if (memberId === userId) return;
-    await supabase
-      .from("challenge_members")
-      .delete()
-      .eq("challenge_id", id)
-      .eq("user_id", memberId);
-    setMembers((m) => m.filter((x) => x.user_id !== memberId));
-  }
-
-  async function archiveChallenge() {
-    await supabase.from("challenges").update({ archived: true }).eq("id", id);
-    router.push("/");
+  function update(patch: Partial<ChallengeData>) {
+    setData((d) => d ? { ...d, ...patch } : d);
   }
 
   return (
@@ -115,28 +89,24 @@ export default function ChallengeSettingsPage() {
 
       <form onSubmit={handleSave} className="flex flex-col gap-5">
         <Field label="Challenge name">
-          <input
-            required
+          <input required
             className="w-full rounded-[10px] px-3 py-2.5 text-sm outline-none"
             style={{ backgroundColor: "var(--bg-subtle)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            value={data.name} onChange={(e) => update({ name: e.target.value })}
           />
         </Field>
 
         <Field label="Description">
-          <textarea
+          <textarea rows={3}
             className="w-full rounded-[10px] px-3 py-2.5 text-sm outline-none resize-none"
             style={{ backgroundColor: "var(--bg-subtle)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
-            rows={3}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            value={data.description} onChange={(e) => update({ description: e.target.value })}
           />
         </Field>
 
-        <Field label={`Daily goal — ${dailyGoal} pages (${dailyGoal * 7}/week)`}>
-          <input type="range" min={1} max={50} value={dailyGoal}
-            onChange={(e) => setDailyGoal(Number(e.target.value))}
+        <Field label={`Daily goal — ${data.dailyGoal} pages (${data.dailyGoal * 7}/week)`}>
+          <input type="range" min={1} max={50} value={data.dailyGoal}
+            onChange={(e) => update({ dailyGoal: Number(e.target.value) })}
             className="w-full accent-[#7B3B52]"
           />
         </Field>
@@ -145,48 +115,50 @@ export default function ChallengeSettingsPage() {
           <Field label="Currency" className="w-24 shrink-0">
             <input className="w-full rounded-[10px] px-3 py-2.5 text-sm outline-none text-center"
               style={{ backgroundColor: "var(--bg-subtle)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
-              value={penaltyCurrency} onChange={(e) => setPenaltyCurrency(e.target.value)} maxLength={3}
+              value={data.penaltyCurrency} onChange={(e) => update({ penaltyCurrency: e.target.value })} maxLength={3}
             />
           </Field>
           <Field label="Penalty / page" className="flex-1">
             <input type="number" min={0}
               className="w-full rounded-[10px] px-3 py-2.5 text-sm outline-none"
               style={{ backgroundColor: "var(--bg-subtle)", color: "var(--text-primary)", border: "1px solid var(--border-default)" }}
-              value={penaltyAmount} onChange={(e) => setPenaltyAmount(Number(e.target.value))}
+              value={data.penaltyAmount} onChange={(e) => update({ penaltyAmount: Number(e.target.value) })}
             />
           </Field>
         </div>
 
-        <Toggle label="Surplus carry-over" description="Extra pages roll to next week" value={carryOver} onChange={setCarryOver} />
-        <Toggle label="Invite link active" description="Allow new members to join" value={inviteActive} onChange={setInviteActive} />
+        <Toggle label="Surplus carry-over" description="Extra pages roll to next week" value={data.carryOver} onChange={(v) => update({ carryOver: v })} />
+        <Toggle label="Invite link active" description="Allow new members to join" value={data.inviteActive} onChange={(v) => update({ inviteActive: v })} />
 
-        <button type="submit" disabled={saving} className="w-full py-3.5 rounded-[10px] font-serif text-base font-semibold text-white disabled:opacity-40"
+        <button type="submit" disabled={saving}
+          className="w-full py-3.5 rounded-[10px] font-serif text-base font-semibold text-white disabled:opacity-40"
           style={{ backgroundColor: "var(--app-accent)" }}>
           {saving ? "Saving…" : "Save changes"}
         </button>
       </form>
 
       <div>
-        <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
-          Members
-        </p>
+        <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>Members</p>
         <div className="flex flex-col gap-2">
-          {members.map((m) => (
-            <div key={m.user_id} className="flex items-center gap-3 p-3 rounded-[10px]"
+          {data.members.map((m) => (
+            <div key={m.userId} className="flex items-center gap-3 p-3 rounded-[10px]"
               style={{ backgroundColor: "var(--bg-card)", border: "1px solid var(--border-default)" }}>
-              {m.avatar_url ? (
-                <img src={m.avatar_url} alt={m.display_name} className="w-8 h-8 rounded-full object-cover" />
+              {m.avatarUrl ? (
+                <img src={m.avatarUrl} alt={m.displayName} className="w-8 h-8 rounded-full object-cover" />
               ) : (
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold"
                   style={{ backgroundColor: "var(--bg-subtle)", color: "var(--text-secondary)" }}>
-                  {m.display_name[0]?.toUpperCase()}
+                  {m.displayName[0]?.toUpperCase()}
                 </div>
               )}
               <p className="flex-1 text-sm" style={{ color: "var(--text-primary)" }}>
-                {m.display_name}{m.user_id === userId ? " (you)" : ""}
+                {m.displayName}{m.userId === data.currentUserId ? " (you)" : ""}
               </p>
-              {m.user_id !== userId && (
-                <button onClick={() => removeMember(m.user_id)}>
+              {m.userId !== data.currentUserId && (
+                <button onClick={async () => {
+                  await removeMember(id, m.userId);
+                  update({ members: data.members.filter((x) => x.userId !== m.userId) });
+                }}>
                   <Trash2 size={16} style={{ color: "var(--text-muted)" }} />
                 </button>
               )}
@@ -196,12 +168,13 @@ export default function ChallengeSettingsPage() {
       </div>
 
       <div className="flex flex-col gap-2">
-        <button onClick={regenerateToken} className="flex items-center gap-2 text-sm py-2.5 px-4 rounded-[10px]"
+        <button onClick={() => regenerateInviteToken(id)}
+          className="flex items-center gap-2 text-sm py-2.5 px-4 rounded-[10px]"
           style={{ backgroundColor: "var(--bg-subtle)", color: "var(--text-secondary)" }}>
-          <RefreshCw size={16} />
-          Regenerate invite link
+          <RefreshCw size={16} /> Regenerate invite link
         </button>
-        <button onClick={archiveChallenge} className="flex items-center gap-2 text-sm py-2.5 px-4 rounded-[10px]"
+        <button onClick={() => archiveChallenge(id)}
+          className="flex items-center gap-2 text-sm py-2.5 px-4 rounded-[10px]"
           style={{ backgroundColor: "var(--penalty-bg)", color: "var(--penalty)" }}>
           Archive challenge
         </button>

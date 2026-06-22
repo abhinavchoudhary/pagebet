@@ -1,6 +1,15 @@
-import { createClient } from "@/lib/supabase/server";
+import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { db } from "@/lib/db";
+import {
+  challengeMembers,
+  challenges,
+  books,
+  challengeSessionCredits,
+  users,
+} from "@/lib/db/schema";
+import { eq, and, sum } from "drizzle-orm";
 import { PageStrip } from "@/components/page-strip";
 import { ChallengeCard } from "@/components/challenge-card";
 import { HomeLogButton } from "@/components/home-log-button";
@@ -8,94 +17,138 @@ import { getRollingWeek } from "@/lib/rolling-week";
 import { computePenalty } from "@/lib/penalty";
 
 export default async function HomePage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login");
 
-  const [profileRes, challengeRes, booksRes] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", user.id).single(),
-    supabase
-      .from("challenge_members")
-      .select("challenge_id, joined_at, challenges(*)")
-      .eq("user_id", user.id),
-    supabase
-      .from("books")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("finished", false)
-      .order("added_at", { ascending: false }),
+  const userId = session.user.id;
+  const now = new Date();
+
+  const [myBooks, memberships] = await Promise.all([
+    db
+      .select()
+      .from(books)
+      .where(and(eq(books.userId, userId), eq(books.finished, false)))
+      .orderBy(books.addedAt),
+    db
+      .select({ challengeId: challengeMembers.challengeId, joinedAt: challengeMembers.joinedAt })
+      .from(challengeMembers)
+      .where(eq(challengeMembers.userId, userId)),
   ]);
 
-  const profile = profileRes.data;
-  const memberships = challengeRes.data ?? [];
-  const books = booksRes.data ?? [];
+  const challengeIds = memberships.map((m) => m.challengeId);
 
-  const now = new Date();
-  const dayName = now.toLocaleDateString("en-US", { weekday: "long" });
-  const dateStr = now.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+  const myChallenges =
+    challengeIds.length > 0
+      ? await db
+          .select()
+          .from(challenges)
+          .where(eq(challenges.archived, false))
+      : [];
 
-  const activeMemberships = memberships.filter(
-    (m) => m.challenges && !(m.challenges as Record<string, unknown>).archived
+  const activeChallenges = myChallenges.filter((c) =>
+    challengeIds.includes(c.id)
   );
 
-  const firstChallenge = activeMemberships[0];
-  let weekSummary = { pages: 0, goal: 35, penalty: 0, daysRemaining: 7 };
+  const firstMembership = memberships[0];
+  const firstChallenge = firstMembership
+    ? activeChallenges.find((c) => c.id === firstMembership.challengeId)
+    : null;
 
-  if (firstChallenge) {
-    const { weekStart, daysRemaining } = getRollingWeek(
-      new Date(firstChallenge.joined_at),
-      now
-    );
-    const c = firstChallenge.challenges as Record<string, unknown>;
-    const { data: credits } = await supabase
-      .from("challenge_session_credits")
-      .select("pages_credited")
-      .eq("challenge_id", firstChallenge.challenge_id)
-      .eq("user_id", user.id)
-      .eq("week_start", weekStart.toISOString().split("T")[0]);
+  let weekSummary = { pages: 0, goal: 35, penalty: 0, daysRemaining: 7, currency: "₹" };
 
-    const pagesThisWeek = (credits ?? []).reduce((s, r) => s + r.pages_credited, 0);
-    const weeklyGoal = (c.weekly_goal as number) ?? 35;
+  if (firstChallenge && firstMembership) {
+    const { weekStart, daysRemaining } = getRollingWeek(firstMembership.joinedAt, now);
+    const weekStartStr = weekStart.toISOString().split("T")[0];
+
+    const [creditSum] = await db
+      .select({ total: sum(challengeSessionCredits.pagesCredited) })
+      .from(challengeSessionCredits)
+      .where(
+        and(
+          eq(challengeSessionCredits.challengeId, firstChallenge.id),
+          eq(challengeSessionCredits.userId, userId),
+          eq(challengeSessionCredits.weekStart, weekStartStr)
+        )
+      );
+
+    const pagesThisWeek = Number(creditSum?.total ?? 0);
     const { penaltyExposure } = computePenalty({
-      weeklyGoal,
+      weeklyGoal: firstChallenge.weeklyGoal,
       pagesThisWeek,
-      penaltyAmount: (c.penalty_amount as number) ?? 10,
-      carryOver: (c.carry_over as boolean) ?? false,
+      penaltyAmount: Number(firstChallenge.penaltyAmount),
+      carryOver: firstChallenge.carryOver,
     });
 
     weekSummary = {
       pages: pagesThisWeek,
-      goal: weeklyGoal,
+      goal: firstChallenge.weeklyGoal,
       penalty: penaltyExposure,
       daysRemaining,
+      currency: firstChallenge.penaltyCurrency,
     };
   }
 
-  const challengeLeaderboards = await Promise.all(
-    activeMemberships.slice(0, 3).map(async (m) => {
-      const c = m.challenges as Record<string, unknown>;
-      const { data: entries } = await supabase.rpc("get_leaderboard", {
-        p_challenge_id: m.challenge_id,
-      });
+  const leaderboards = await Promise.all(
+    activeChallenges.slice(0, 3).map(async (challenge) => {
+      const membership = memberships.find((m) => m.challengeId === challenge.id);
+      if (!membership) return null;
+
+      const members = await db
+        .select({
+          userId: challengeMembers.userId,
+          displayName: users.name,
+          avatarUrl: users.image,
+          joinedAt: challengeMembers.joinedAt,
+        })
+        .from(challengeMembers)
+        .innerJoin(users, eq(challengeMembers.userId, users.id))
+        .where(eq(challengeMembers.challengeId, challenge.id));
+
+      const entries = await Promise.all(
+        members.map(async (m) => {
+          const { weekStart } = getRollingWeek(m.joinedAt, now);
+          const [creditSum] = await db
+            .select({ total: sum(challengeSessionCredits.pagesCredited) })
+            .from(challengeSessionCredits)
+            .where(
+              and(
+                eq(challengeSessionCredits.challengeId, challenge.id),
+                eq(challengeSessionCredits.userId, m.userId),
+                eq(challengeSessionCredits.weekStart, weekStart.toISOString().split("T")[0])
+              )
+            );
+
+          const pagesThisWeek = Number(creditSum?.total ?? 0);
+          const { penaltyExposure } = computePenalty({
+            weeklyGoal: challenge.weeklyGoal,
+            pagesThisWeek,
+            penaltyAmount: Number(challenge.penaltyAmount),
+            carryOver: challenge.carryOver,
+          });
+
+          return {
+            user_id: m.userId,
+            display_name: m.displayName ?? "Reader",
+            avatar_url: m.avatarUrl ?? null,
+            pages_this_week: pagesThisWeek,
+            weekly_goal: challenge.weeklyGoal,
+            penalty_exposure: penaltyExposure,
+            penalty_currency: challenge.penaltyCurrency,
+          };
+        })
+      );
 
       return {
-        id: m.challenge_id,
-        name: (c.name as string) ?? "",
-        currency: (c.penalty_currency as string) ?? "₹",
-        entries: (entries ?? []).map((e) => ({
-          user_id: e.user_id,
-          display_name: e.display_name,
-          avatar_url: e.avatar_url,
-          pages_this_week: Number(e.pages_this_week),
-          weekly_goal: e.weekly_goal,
-          penalty_exposure: Number(e.penalty_exposure),
-          penalty_currency: (c.penalty_currency as string) ?? "₹",
-        })),
+        id: challenge.id,
+        name: challenge.name,
+        entries: entries.sort((a, b) => b.pages_this_week - a.pages_this_week),
       };
     })
   );
 
-  const activeBooks = books.slice(0, 3);
+  const dayName = now.toLocaleDateString("en-US", { weekday: "long" });
+  const dateStr = now.toLocaleDateString("en-US", { month: "long", day: "numeric" });
+  const activeBooks = myBooks.slice(0, 3);
 
   return (
     <div className="flex flex-col gap-6">
@@ -124,7 +177,7 @@ export default async function HomePage() {
             >
               {weekSummary.pages}
             </p>
-            <p className="text-xs mt-1" style={{ color: "var(--text-muted)", fontFamily: "var(--font-inter)" }}>
+            <p className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>
               pages read this week
             </p>
           </div>
@@ -140,7 +193,7 @@ export default async function HomePage() {
                 className="text-xs font-semibold px-2.5 py-1 rounded-full"
                 style={{ backgroundColor: "var(--penalty-bg)", color: "var(--penalty)" }}
               >
-                ₹{weekSummary.penalty} risk
+                {weekSummary.currency}{weekSummary.penalty} risk
               </span>
             )}
           </div>
@@ -170,8 +223,8 @@ export default async function HomePage() {
                   color: "var(--text-secondary)",
                 }}
               >
-                {book.cover_url ? (
-                  <img src={book.cover_url} alt={book.title} className="w-5 h-7 object-cover rounded" />
+                {book.coverUrl ? (
+                  <img src={book.coverUrl} alt={book.title} className="w-5 h-7 object-cover rounded" />
                 ) : (
                   <span>📗</span>
                 )}
@@ -182,19 +235,14 @@ export default async function HomePage() {
         </div>
       )}
 
-      {challengeLeaderboards.length > 0 ? (
+      {leaderboards.filter(Boolean).length > 0 ? (
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider mb-3" style={{ color: "var(--text-muted)" }}>
             My challenges
           </p>
           <div className="flex flex-col gap-3">
-            {challengeLeaderboards.map((c) => (
-              <ChallengeCard
-                key={c.id}
-                id={c.id}
-                name={c.name}
-                members={c.entries}
-              />
+            {leaderboards.filter(Boolean).map((c) => (
+              <ChallengeCard key={c!.id} id={c!.id} name={c!.name} members={c!.entries} />
             ))}
           </div>
         </div>
@@ -214,15 +262,7 @@ export default async function HomePage() {
         </div>
       )}
 
-      <HomeLogButton
-        books={books}
-        challenges={activeMemberships.map((m) => ({
-          id: m.challenge_id,
-          name: ((m.challenges as Record<string, unknown>)?.name as string) ?? "",
-          joined_at: m.joined_at,
-        }))}
-        userId={user.id}
-      />
+      <HomeLogButton books={myBooks} userId={userId} />
     </div>
   );
 }

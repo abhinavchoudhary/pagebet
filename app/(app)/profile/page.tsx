@@ -1,21 +1,28 @@
-import { createClient } from "@/lib/supabase/server";
+import { auth, signOut } from "@/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { LogOut } from "lucide-react";
+import { db } from "@/lib/db";
+import { challengeMembers, challenges } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 export default async function ProfilePage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  const session = await auth();
+  if (!session?.user?.id) redirect("/login");
 
-  const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single();
+  const user = session.user;
 
-  const { data: challengeMemberships } = await supabase
-    .from("challenge_members")
-    .select("challenge_id, joined_at, challenges(name, weekly_goal, penalty_amount, penalty_currency)")
-    .eq("user_id", user.id);
-
-  const membershipCount = (challengeMemberships ?? []).length;
+  const memberships = await db
+    .select({
+      challengeId: challengeMembers.challengeId,
+      name: challenges.name,
+      weeklyGoal: challenges.weeklyGoal,
+      penaltyAmount: challenges.penaltyAmount,
+      penaltyCurrency: challenges.penaltyCurrency,
+    })
+    .from(challengeMembers)
+    .innerJoin(challenges, eq(challengeMembers.challengeId, challenges.id))
+    .where(eq(challengeMembers.userId, user.id));
 
   return (
     <div className="flex flex-col gap-6">
@@ -23,42 +30,36 @@ export default async function ProfilePage() {
         <h1 className="font-serif text-2xl font-semibold" style={{ color: "var(--text-primary)" }}>
           Profile
         </h1>
-        <form action="/auth/signout" method="POST">
-          <button
-            type="submit"
+        <form action={async () => {
+          "use server";
+          await signOut({ redirectTo: "/login" });
+        }}>
+          <button type="submit"
             className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-[8px]"
-            style={{ color: "var(--text-muted)", backgroundColor: "var(--bg-subtle)" }}
-          >
-            <LogOut size={16} />
-            Sign out
+            style={{ color: "var(--text-muted)", backgroundColor: "var(--bg-subtle)" }}>
+            <LogOut size={16} /> Sign out
           </button>
         </form>
       </div>
 
       <div
         className="flex items-center gap-4 p-5 rounded-[16px]"
-        style={{
-          backgroundColor: "var(--bg-card)",
-          boxShadow: "var(--shadow-card)",
-          border: "1px solid var(--border-default)",
-        }}
+        style={{ backgroundColor: "var(--bg-card)", boxShadow: "var(--shadow-card)", border: "1px solid var(--border-default)" }}
       >
-        {profile?.avatar_url ? (
-          <img src={profile.avatar_url} alt={profile.display_name} className="w-16 h-16 rounded-full object-cover" />
+        {user.image ? (
+          <img src={user.image} alt={user.name ?? ""} className="w-16 h-16 rounded-full object-cover" />
         ) : (
-          <div
-            className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-semibold"
-            style={{ backgroundColor: "var(--app-accent-light)", color: "var(--app-accent)" }}
-          >
-            {profile?.display_name?.[0]?.toUpperCase() ?? "?"}
+          <div className="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-semibold"
+            style={{ backgroundColor: "var(--app-accent-light)", color: "var(--app-accent)" }}>
+            {user.name?.[0]?.toUpperCase() ?? "?"}
           </div>
         )}
         <div>
           <p className="font-serif text-xl font-semibold" style={{ color: "var(--text-primary)" }}>
-            {profile?.display_name}
+            {user.name}
           </p>
           <p className="text-sm mt-0.5" style={{ color: "var(--text-muted)" }}>
-            {membershipCount} challenge{membershipCount !== 1 ? "s" : ""}
+            {memberships.length} challenge{memberships.length !== 1 ? "s" : ""}
           </p>
         </div>
       </div>
@@ -68,36 +69,23 @@ export default async function ProfilePage() {
           My challenges
         </p>
         <div className="flex flex-col gap-2">
-          {(challengeMemberships ?? []).map((m) => {
-            const c = m.challenges as Record<string, unknown>;
-            return (
-              <Link
-                key={m.challenge_id}
-                href={`/challenges/${m.challenge_id}`}
-                className="flex items-center justify-between p-4 rounded-[12px]"
-                style={{ backgroundColor: "var(--bg-card)", border: "1px solid var(--border-default)" }}
-              >
-                <div>
-                  <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>
-                    {c?.name as string}
-                  </p>
-                  <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                    {c?.weekly_goal as number} pages/week · {c?.penalty_currency as string}{c?.penalty_amount as number}/page
-                  </p>
-                </div>
-                <span style={{ color: "var(--text-muted)" }}>›</span>
-              </Link>
-            );
-          })}
+          {memberships.map((m) => (
+            <Link key={m.challengeId} href={`/challenges/${m.challengeId}`}
+              className="flex items-center justify-between p-4 rounded-[12px]"
+              style={{ backgroundColor: "var(--bg-card)", border: "1px solid var(--border-default)" }}>
+              <div>
+                <p className="text-sm font-medium" style={{ color: "var(--text-primary)" }}>{m.name}</p>
+                <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+                  {m.weeklyGoal} pages/week · {m.penaltyCurrency}{Number(m.penaltyAmount)}/page
+                </p>
+              </div>
+              <span style={{ color: "var(--text-muted)" }}>›</span>
+            </Link>
+          ))}
 
-          <Link
-            href="/challenges/new"
+          <Link href="/challenges/new"
             className="flex items-center justify-center p-4 rounded-[12px] text-sm font-medium"
-            style={{
-              border: `1px dashed var(--border-strong)`,
-              color: "var(--text-muted)",
-            }}
-          >
+            style={{ border: "1px dashed var(--border-strong)", color: "var(--text-muted)" }}>
             + Create a challenge
           </Link>
         </div>

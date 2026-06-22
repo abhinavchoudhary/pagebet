@@ -1,19 +1,24 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { LogSessionDrawer } from "@/components/log-session-drawer";
-import type { Database } from "@/lib/supabase/types";
 
-type Book = Database["public"]["Tables"]["books"]["Row"];
+interface Book {
+  id: string;
+  title: string;
+  authors: string[] | null;
+  coverUrl: string | null;
+}
 
 interface HomeLogButtonProps {
   books: Book[];
-  challenges: Array<{ id: string; name: string; joined_at: string }>;
   userId: string;
 }
 
-export function HomeLogButton({ books, challenges, userId }: HomeLogButtonProps) {
+export function HomeLogButton({ books }: HomeLogButtonProps) {
   const [open, setOpen] = useState(false);
+  const router = useRouter();
 
   return (
     <>
@@ -35,10 +40,9 @@ export function HomeLogButton({ books, challenges, userId }: HomeLogButtonProps)
         open={open}
         onClose={() => setOpen(false)}
         books={books}
-        challenges={challenges}
-        userId={userId}
         onSuccess={() => {
-          setTimeout(() => window.location.reload(), 500);
+          setOpen(false);
+          setTimeout(() => router.refresh(), 300);
         }}
       />
     </>

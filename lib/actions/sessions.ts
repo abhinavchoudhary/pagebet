@@ -84,6 +84,41 @@ export async function logSession(data: {
   return { success: true, pagesRead };
 }
 
+export async function deleteSession(sessionId: string): Promise<void> {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+
+  const [existing] = await db
+    .select({ userId: readingSessions.userId })
+    .from(readingSessions)
+    .where(eq(readingSessions.id, sessionId));
+
+  if (!existing || existing.userId !== session.user.id) throw new Error("Not found");
+
+  await db.delete(readingSessions).where(eq(readingSessions.id, sessionId));
+}
+
+export async function editSessionPages(
+  sessionId: string,
+  newPagesRead: number
+): Promise<void> {
+  const session = await auth();
+  if (!session?.user?.id) throw new Error("Unauthorized");
+  if (newPagesRead <= 0) return;
+
+  const [existing] = await db
+    .select({ userId: readingSessions.userId })
+    .from(readingSessions)
+    .where(eq(readingSessions.id, sessionId));
+
+  if (!existing || existing.userId !== session.user.id) throw new Error("Not found");
+
+  await Promise.all([
+    db.update(readingSessions).set({ pagesRead: newPagesRead }).where(eq(readingSessions.id, sessionId)),
+    db.update(challengeSessionCredits).set({ pagesCredited: newPagesRead }).where(eq(challengeSessionCredits.sessionId, sessionId)),
+  ]);
+}
+
 export async function getLastCumulativePosition(bookId: string): Promise<number | null> {
   const session = await auth();
   if (!session?.user?.id) return null;

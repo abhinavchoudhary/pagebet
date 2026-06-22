@@ -8,7 +8,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-dvh flex flex-col" style={{ backgroundColor: "var(--bg-base)" }}>
-      <main className="flex-1 pb-32 px-4 pt-6 max-w-lg mx-auto w-full">
+      <main className="flex-1 px-4 pt-6 max-w-lg mx-auto w-full" style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 140px)" }}>
         {children}
       </main>
       <BottomNav />

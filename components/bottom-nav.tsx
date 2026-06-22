@@ -19,7 +19,7 @@ export function BottomNav() {
       className="fixed bottom-0 left-0 right-0 z-40"
       style={{ backgroundColor: "var(--bg-card)", borderTop: "1px solid var(--border-default)" }}
     >
-      <nav className="flex items-center justify-around px-4 pb-safe pt-2 pb-2">
+      <nav className="flex items-center justify-around px-4 pt-2" style={{ paddingBottom: "max(8px, env(safe-area-inset-bottom, 0px))" }}>
         {tabs.map(({ href, label, Icon }) => {
           const active = pathname === href;
           return (

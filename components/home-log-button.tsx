@@ -22,7 +22,7 @@ export function HomeLogButton({ books }: HomeLogButtonProps) {
 
   return (
     <>
-      <div className="fixed bottom-[64px] left-0 right-0 flex justify-center pointer-events-none z-30">
+      <div className="fixed left-0 right-0 flex justify-center pointer-events-none z-30" style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 88px)" }}>
         <button
           onClick={() => setOpen(true)}
           className="pointer-events-auto px-6 py-3 rounded-full font-serif font-semibold text-sm text-white shadow-lg transition-transform active:scale-95"

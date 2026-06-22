@@ -6,7 +6,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json([]);
   }
 
-  const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=12&printType=books`;
+  const apiKey = process.env.GOOGLE_BOOKS_API_KEY;
+  const keyParam = apiKey ? `&key=${apiKey}` : "";
+  const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(q)}&maxResults=12&printType=books${keyParam}`;
   const res = await fetch(url, { next: { revalidate: 300 } });
 
   if (!res.ok) {

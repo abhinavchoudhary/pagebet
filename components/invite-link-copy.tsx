@@ -1,36 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import { Copy, Check } from "lucide-react";
+import { Copy } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { toast } from "@/lib/toast";
 
 export function InviteLinkCopy({ url }: { url: string }) {
-  const [copied, setCopied] = useState(false);
-
   async function handleCopy() {
     await navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    toast.success("Invite link copied");
   }
 
   return (
-    <div
-      className="flex items-center gap-2 p-3 rounded-[10px]"
-      style={{ backgroundColor: "var(--bg-subtle)", border: "1px solid var(--border-default)" }}
-    >
-      <p className="text-xs flex-1 truncate font-mono" style={{ color: "var(--text-secondary)" }}>
+    <div className="flex items-center gap-2 rounded-corner-md bg-surface-container-high p-2 pl-3">
+      <p className="min-w-0 flex-1 truncate md-body-small text-on-surface-variant">
         {url}
       </p>
-      <button
-        onClick={handleCopy}
-        className="shrink-0 flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-[6px] transition-colors"
-        style={{
-          backgroundColor: copied ? "#4A7C59" : "var(--app-accent)",
-          color: "#fff",
-        }}
-      >
-        {copied ? <Check size={14} /> : <Copy size={14} />}
-        {copied ? "Copied!" : "Copy"}
-      </button>
+      <Button variant="tonal" size="sm" onClick={handleCopy}>
+        <Copy className="size-4" /> Copy
+      </Button>
     </div>
   );
 }

@@ -99,6 +99,7 @@ title           text NOT NULL
 authors         text[]
 cover_url       text
 total_pages     int
+current_page    int NOT NULL DEFAULT 0   -- reader's current position; maintained by recomputeBookProgress() + updateBookProgress()
 finished        boolean NOT NULL DEFAULT false
 added_at        timestamptz DEFAULT now()
 UNIQUE (user_id, google_books_id)
@@ -207,102 +208,94 @@ All other data access uses Supabase's auto-generated REST/Realtime client.
 
 ---
 
-## Visual Design System
+## Visual Design System — "Warm Material You"
 
-### Design Philosophy
+The UI is built on **Material Design 3** foundations (token system, elevation,
+shape scale, motion, M3 components) while keeping Pagebet's cozy, literary
+identity: the palette is **seeded from amber `#c8913a`**, and display type stays
+**Newsreader** (serif). Interaction craft follows **Emil Kowalski's principles**
+(emilkowal.ski/ui). The app ships **light + dark** themes.
 
-The app should feel like a cozy reading nook. Warm, calm, unhurried. No gamification chrome — no XP bars, badges, or confetti. The aesthetic reference is a well-loved literary app: soft illustrated depth, generous whitespace, and typography that feels like a book.
+### Token layer — `app/globals.css`
 
-### Color Tokens
+All colour, shape, elevation and motion values are CSS custom properties. Nothing
+in components should hard-code a hex value.
 
-```css
-/* Backgrounds — layered warm cream */
---color-bg-base:        #FAF7F2;   /* page background */
---color-bg-card:        #FFFFFF;   /* card surfaces */
---color-bg-subtle:      #F3EDE4;   /* section dividers, input fills */
---color-bg-warm:        #FDEEDE;   /* soft peach tint, highlight areas */
+**Colour** — hand-authored warm tonal ramps (`--md-ref-*`, tones 10–99) resolve
+into M3 **system roles** (`--md-sys-color-*`): `primary`, `on-primary`,
+`primary-container`, `secondary`, `tertiary` (a soft sage — success / on-track),
+`error`, `surface`, `surface-container{,-low,-high,-highest}`, `on-surface`,
+`on-surface-variant`, `outline`, `outline-variant`, `inverse-surface`, …
+Light values sit on bare `:root`; dark values are redefined under both
+`@media (prefers-color-scheme: dark) :root:not([data-theme="light"])` and
+`:root[data-theme="dark"]` so the manual toggle wins in either direction.
 
-/* Accent — deep burgundy/wine */
---color-accent:         #7B3B52;   /* primary CTA, active nav, progress arc */
---color-accent-light:   #F2E5E9;   /* accent backgrounds, pill tags */
+**Shape** — `--md-sys-shape-corner-{none,xs,sm,md,lg,xl,full}` = 0/4/8/12/16/28/full.
+Exposed to Tailwind as `rounded-corner-{xs…full}`.
 
-/* Penalty tone — muted amber, not red */
---color-penalty:        #B45309;   /* penalty amount text */
---color-penalty-bg:     #FEF3C7;   /* penalty chip background */
+**Elevation** — `--md-sys-elevation-{0-5}` warm-tinted shadows; utilities
+`.md-elevation-{0-5}`.
 
-/* Text */
---color-text-primary:   #1C1309;   /* headings, numbers */
---color-text-secondary: #6B5B4E;   /* labels, captions */
---color-text-muted:     #A89080;   /* placeholders, timestamps */
+**Motion** — `--md-sys-motion-easing-*` (standard / emphasized / …) plus
+`--ease-out-expo` / `--ease-out-quart` for enters. Duration tokens
+`--md-sys-motion-duration-{short,medium}-{1-4}` (50–400 ms). A global
+`prefers-reduced-motion` block zeroes every animation/transition.
 
-/* Border */
---color-border:         #EDE4D9;   /* card borders, dividers */
---color-border-strong:  #D4C4B4;   /* inputs, focused states */
-```
+**Typography roles** — `.md-display-{large,medium,small}`, `.md-headline-*`,
+`.md-title-*`, `.md-body-*`, `.md-label-*` (+ `.md-label-overline`). Display /
+headline / title-large = Newsreader; everything else = Inter.
 
-### Typography
+**Tailwind bridge** — `@theme inline` maps the M3 roles to Tailwind colour
+utilities (`bg-surface-container`, `text-on-surface-variant`,
+`bg-primary-container`, `border-outline`, …) and keeps the shadcn `--*` aliases
+pointing at the same roles. Legacy app tokens (`--espresso`, `--cream`,
+`--text-primary`, …) are aliased to M3 roles for backward compatibility.
 
-```css
-/* Display / headings — literary feel */
-font-family: 'Lora', Georgia, serif;          /* h1–h3, challenge names, hero text */
+### Emil Kowalski interaction principles (applied)
 
-/* UI / body — clean and readable */
-font-family: 'Inter', system-ui, sans-serif;  /* body, labels, numbers, captions */
-```
+| Principle | Where |
+|---|---|
+| `scale(0.97)` on `:active` | global rule in `globals.css` for every `button` / `[role=button]` |
+| Never animate from `scale(0)` — start ≥ 0.96 | `@keyframes md-enter` (`.96 → 1`), `.md-blur-in` (`.98 → 1`) |
+| Custom easing, not CSS built-ins | all transitions use `--md-sys-motion-easing-*` / `--ease-out-*` |
+| `ease-out` for enter/exit | drawer steps, menus, toasts |
+| Keep animations < 300 ms, off high-frequency actions | duration tokens cap at 400 ms; reactions/nav use `short-*` |
+| Blur to bridge awkward state changes | `.md-blur-in` on the log-session step transition; drawer overlay `backdrop-blur` |
+| Respect `prefers-reduced-motion` | global override block |
 
-Scale:
-- `text-2xl` (24px) Lora 600 — screen titles, progress number
-- `text-lg` (18px) Lora 500 — card headings, challenge names
-- `text-sm` (14px) Inter 400 — body, feed text
-- `text-xs` (12px) Inter 400 — timestamps, captions, labels
+**Sonner** (Emil's toast library, `components/ui/toaster.tsx` + `lib/toast.ts`)
+handles success / error / **undo** feedback — e.g. deleting a reading log shows
+an Undo toast that re-inserts the session.
 
-### Elevation / Shadow
+### Component primitives — `components/ui/`
 
-Cards use a single warm, low-opacity shadow — no dark or blue-tinted shadows:
-```css
---shadow-card: 0 2px 12px rgba(100, 60, 30, 0.07);
---shadow-drawer: 0 -4px 24px rgba(100, 60, 30, 0.10);  /* bottom sheet */
-```
+`button` (filled / tonal / elevated / outlined / text / filled-tertiary / danger
+/ fab), `card` (filled / elevated / outlined), `chip`, `linear-progress`,
+`circular-progress`, `text-field` (filled + floating label), `switch`,
+`segmented-button`, `top-app-bar`, `list-item`, `toaster`. `state-layer` behaviour
+comes from the `.md-state-layer` utility (hover / focus / pressed overlay).
 
-No `border-radius` larger than `16px`. Cards: `12px`. Buttons: `10px`. Inputs: `10px`.
+`components/bottom-nav.tsx` is the M3 navigation bar (animated pill indicator,
+transform/opacity only).
 
-### Progress Visualization — Page Strip
+### Theming
 
-Weekly progress uses a **large hero number + page strip**, not an arc or ring.
+`components/theme-provider.tsx` exposes `useTheme()` (`pref`: light | dark |
+system, `resolved`, `setPref`) via `useSyncExternalStore` (no hydration
+mismatch). Preference persists to `localStorage` (`pagebet-theme`); an inline
+`beforeInteractive` script (`lib/theme.ts` → `NO_FLASH_SCRIPT`) sets
+`data-theme` before first paint. `components/theme-toggle.tsx` (a segmented
+button) lives on the Profile screen.
 
-**Hero number:**
-- The pages-read count is displayed in Lora 64px, color `--color-text-primary`
-- "pages read this week" in Inter 12px muted below it
-- Goal ("of 35 pages"), days remaining, and penalty chip sit to the right
+### Progress visualisation
 
-**Page strip:**
-- A row of 35 small vertical rectangles (one per page goal), rendered via JS
-- Read pages: `height: 28px`, color `--color-accent` (`#7B3B52`)
-- Current page (last read): `height: 20px`, color `#C4919F` (lighter burgundy)
-- Unread pages: `height: 16px`, color `--color-bg-subtle` (`#F0EAE3`)
-- Milestone labels below at 0, 7, 14, 21, 35
-- On goal completion: all marks fill to accent, a muted sage green (`#4A7C59`) variant is used
-
-### Iconography
-
-- Navigation icons: minimal line icons (Lucide React), 22px, `stroke-width: 1.5`
-- Decorative / empty states: soft illustrated 3D-style icons — use the Phosphor "Duotone" set in warm tones, or custom SVG illustrations
-- Book covers are the primary visual element — they provide all the color variety needed
-
-### Bottom Navigation
-
-Minimal, icon + label. Active tab uses `--color-accent` for icon and a 2px bottom indicator dot, not a filled background.
-
-```
-Home        Feed        Library     Profile
-[icon ·]    [icon]      [icon]      [icon]
-```
-
-### Floating Log Button
-
-Not a standard FAB circle. Styled as a warm pill button: `"+ Log session"`, burgundy fill, Lora text, centered above bottom nav. Width: `160px`.
+Weekly goal progress uses the M3 hero number + `LinearProgress`. Per-book
+reading progress uses `CircularProgress` (book detail page) and `LinearProgress`
+(Library tiles, Home "Reading now" rail, Feed cards, Profile). The computation
+lives in `lib/book-progress.ts` (`bookProgress()`), the single source of truth.
 
 ---
+
 
 ## UI / UX Design
 

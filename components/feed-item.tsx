@@ -3,8 +3,21 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
+import { MoreHorizontal } from "lucide-react";
+
 import { toggleReaction } from "@/lib/actions/reactions";
-import { deleteSession, editSessionPages } from "@/lib/actions/sessions";
+import {
+  deleteSession,
+  editSessionPages,
+  restoreSession,
+} from "@/lib/actions/sessions";
+import { Card } from "@/components/ui/card";
+import { Chip } from "@/components/ui/chip";
+import { LinearProgress } from "@/components/ui/linear-progress";
+import { TextField } from "@/components/ui/text-field";
+import { Button } from "@/components/ui/button";
+import { bookProgress } from "@/lib/book-progress";
+import { toast } from "@/lib/toast";
 
 const REACTIONS = [
   { key: "👏", label: "Clap" },
@@ -20,6 +33,8 @@ interface FeedItemProps {
   bookTitle: string;
   bookCoverUrl: string | null;
   bookAuthor: string | null;
+  bookCurrentPage?: number | null;
+  bookTotalPages?: number | null;
   pagesRead: number;
   loggedAt: string;
   reactions: Record<string, number>;
@@ -35,6 +50,8 @@ export function FeedItem({
   bookTitle,
   bookCoverUrl,
   bookAuthor,
+  bookCurrentPage,
+  bookTotalPages,
   pagesRead: initialPagesRead,
   loggedAt,
   reactions: initialReactions,
@@ -44,15 +61,18 @@ export function FeedItem({
   const [reactions, setReactions] = useState(initialReactions);
   const [myReaction, setMyReaction] = useState<string | null>(initialMyReaction);
   const [pagesRead, setPagesRead] = useState(initialPagesRead);
-  const [showMenu, setShowMenu] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editValue, setEditValue] = useState(String(initialPagesRead));
-  const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleted, setDeleted] = useState(false);
   const [, startTransition] = useTransition();
   const router = useRouter();
 
   const isOwn = userId === currentUserId;
+  const progress = bookProgress({
+    currentPage: bookCurrentPage,
+    totalPages: bookTotalPages,
+  });
 
   function handleReaction(key: string) {
     const prev = myReaction;
@@ -64,15 +84,26 @@ export function FeedItem({
       if (next) updated[next] = (updated[next] ?? 0) + 1;
       return updated;
     });
-    startTransition(async () => { await toggleReaction(sessionId, key); });
+    startTransition(async () => {
+      await toggleReaction(sessionId, key);
+    });
   }
 
   function handleDelete() {
-    if (!confirmDelete) { setConfirmDelete(true); return; }
+    setMenuOpen(false);
+    setDeleted(true);
     startTransition(async () => {
-      await deleteSession(sessionId);
-      setDeleted(true);
+      const snap = await deleteSession(sessionId);
       router.refresh();
+      if (snap) {
+        toast.undo("Reading log deleted", () => {
+          startTransition(async () => {
+            await restoreSession(snap);
+            setDeleted(false);
+            router.refresh();
+          });
+        });
+      }
     });
   }
 
@@ -83,7 +114,8 @@ export function FeedItem({
       await editSessionPages(sessionId, pages);
       setPagesRead(pages);
       setEditMode(false);
-      setShowMenu(false);
+      setMenuOpen(false);
+      toast.success("Updated");
       router.refresh();
     });
   }
@@ -91,207 +123,133 @@ export function FeedItem({
   if (deleted) return null;
 
   return (
-    <div
-      className="rounded-[4px] p-4"
-      style={{
-        backgroundColor: "var(--cream)",
-        boxShadow: "var(--shadow-card)",
-        border: "1px solid var(--border-default)",
-      }}
-    >
-      {/* Header row */}
-      <div className="flex items-center gap-2.5 mb-3">
+    <Card variant="elevated" className="p-4">
+      <div className="mb-3 flex items-center gap-2.5">
         {avatarUrl ? (
-          <img src={avatarUrl} alt={userName} className="w-9 h-9 rounded-full object-cover shrink-0" />
+          <img
+            src={avatarUrl}
+            alt={userName}
+            className="size-9 shrink-0 rounded-corner-full object-cover"
+          />
         ) : (
-          <div
-            className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold shrink-0"
-            style={{ backgroundColor: "#e4d8c4", color: "var(--text-muted)" }}
-          >
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-corner-full bg-primary-container md-title-small text-on-primary-container">
             {userName[0]?.toUpperCase()}
           </div>
         )}
-        <div className="flex-1 min-w-0">
-          <p
-            className="text-sm font-semibold leading-tight"
-            style={{ color: "var(--text-primary)", fontFamily: "var(--font-inter)" }}
-          >
-            {userName}
-          </p>
-          <p
-            className="text-[11px]"
-            style={{ color: "var(--text-muted)", fontFamily: "var(--font-inter)" }}
-          >
+        <div className="min-w-0 flex-1">
+          <p className="md-title-small text-on-surface">{userName}</p>
+          <p className="md-body-small text-on-surface-variant">
             {formatDistanceToNow(new Date(loggedAt), { addSuffix: true })}
           </p>
         </div>
         {isOwn && !editMode && (
           <button
-            onClick={() => { setShowMenu(!showMenu); setConfirmDelete(false); }}
-            className="w-7 h-7 flex items-center justify-center rounded-full text-base leading-none"
-            style={{ color: "var(--text-muted)", backgroundColor: showMenu ? "var(--bg-subtle)" : "transparent" }}
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label="Options"
+            className="md-state-layer flex size-9 items-center justify-center rounded-corner-full text-on-surface-variant"
           >
-            ···
+            <MoreHorizontal className="z-[1] size-5" />
           </button>
         )}
       </div>
 
-      {/* Owner actions menu */}
-      {isOwn && showMenu && !editMode && (
-        <div
-          className="flex items-center gap-2 mb-3 px-3 py-2 rounded-[4px]"
-          style={{ backgroundColor: "var(--bg-subtle)" }}
-        >
-          {confirmDelete ? (
-            <>
-              <span className="text-xs flex-1" style={{ color: "var(--text-secondary)", fontFamily: "var(--font-inter)" }}>
-                Delete this log?
-              </span>
-              <button
-                onClick={() => setConfirmDelete(false)}
-                className="text-xs px-2 py-1 rounded-[4px]"
-                style={{ color: "var(--text-muted)" }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDelete}
-                className="text-xs px-3 py-1 rounded-[4px] font-medium"
-                style={{ backgroundColor: "var(--penalty-bg)", color: "var(--penalty)" }}
-              >
-                Delete
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={() => { setEditMode(true); setEditValue(String(pagesRead)); }}
-                className="flex-1 text-xs py-1 text-center font-medium"
-                style={{ color: "var(--sienna)" }}
-              >
-                Edit pages
-              </button>
-              <div className="w-px h-3" style={{ backgroundColor: "var(--border-strong)" }} />
-              <button
-                onClick={handleDelete}
-                className="flex-1 text-xs py-1 text-center font-medium"
-                style={{ color: "var(--penalty)" }}
-              >
-                Delete
-              </button>
-              <div className="w-px h-3" style={{ backgroundColor: "var(--border-strong)" }} />
-              <button onClick={() => setShowMenu(false)} className="text-xs px-1" style={{ color: "var(--text-muted)" }}>✕</button>
-            </>
-          )}
+      {isOwn && menuOpen && !editMode && (
+        <div className="mb-3 flex gap-2 md-enter">
+          <Button
+            variant="tonal"
+            size="sm"
+            onClick={() => {
+              setEditMode(true);
+              setEditValue(String(pagesRead));
+            }}
+          >
+            Edit pages
+          </Button>
+          <Button variant="danger" size="sm" onClick={handleDelete}>
+            Delete
+          </Button>
         </div>
       )}
 
-      {/* Edit mode */}
       {editMode && (
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-xs" style={{ color: "var(--text-secondary)", fontFamily: "var(--font-inter)" }}>
-            Pages read:
-          </span>
-          <input
+        <div className="mb-3 flex items-end gap-2">
+          <TextField
+            label="Pages read"
             type="number"
             inputMode="numeric"
             value={editValue}
             onChange={(e) => setEditValue(e.target.value)}
-            className="w-20 text-center text-sm font-semibold outline-none rounded-[4px] px-2 py-1"
-            style={{ backgroundColor: "var(--bg-subtle)", color: "var(--text-primary)" }}
+            containerClassName="flex-1"
             autoFocus
           />
-          <button
-            onClick={handleSaveEdit}
-            className="text-xs px-3 py-1.5 rounded-[4px] font-medium text-white"
-            style={{ backgroundColor: "var(--sienna)" }}
-          >
+          <Button size="sm" onClick={handleSaveEdit}>
             Save
-          </button>
-          <button
-            onClick={() => { setEditMode(false); setShowMenu(false); }}
-            className="text-xs px-2 py-1"
-            style={{ color: "var(--text-muted)" }}
+          </Button>
+          <Button
+            variant="text"
+            size="sm"
+            onClick={() => {
+              setEditMode(false);
+              setMenuOpen(false);
+            }}
           >
-            ✕
-          </button>
+            Cancel
+          </Button>
         </div>
       )}
 
-      {/* Book chip */}
-      <div
-        className="flex gap-3 items-start rounded-[4px] p-3"
-        style={{ backgroundColor: "var(--bg-subtle)" }}
-      >
+      <div className="flex gap-3 rounded-corner-md bg-surface-container p-3">
         {bookCoverUrl ? (
           <img
             src={bookCoverUrl}
-            alt={bookTitle}
-            className="rounded-[2px] object-cover shrink-0"
-            style={{ width: 30, height: 42 }}
+            alt=""
+            className="h-[42px] w-[30px] shrink-0 rounded-corner-xs object-cover"
           />
         ) : (
-          <div
-            className="rounded-[2px] shrink-0"
-            style={{ width: 30, height: 42, backgroundColor: "var(--espresso)" }}
-          />
+          <div className="h-[42px] w-[30px] shrink-0 rounded-corner-xs bg-primary-container" />
         )}
-        <div className="flex-1 min-w-0">
-          <p className="text-sm" style={{ color: "var(--text-secondary)", fontFamily: "var(--font-inter)" }}>
+        <div className="min-w-0 flex-1">
+          <p className="md-body-medium text-on-surface-variant">
             Read{" "}
-            <span className="font-semibold" style={{ color: "var(--espresso)" }}>
+            <span className="font-semibold text-on-surface">
               {pagesRead} pages
             </span>
           </p>
-          <p className="font-serif text-sm font-semibold mt-0.5 leading-snug" style={{ color: "var(--espresso)" }}>
+          <p className="mt-0.5 line-clamp-1 md-title-small text-on-surface">
             {bookTitle}
           </p>
           {bookAuthor && (
-            <p className="text-[11px] mt-0.5" style={{ color: "var(--text-muted)", fontFamily: "var(--font-inter)" }}>
-              {bookAuthor}
-            </p>
+            <p className="md-body-small text-on-surface-variant">{bookAuthor}</p>
           )}
-          {/* Mini progress bar */}
-          <div
-            className="mt-2 rounded-full overflow-hidden"
-            style={{ height: 3, width: 120, backgroundColor: "#dfd0b8" }}
-          >
-            <div
-              style={{
-                height: "100%",
-                width: "40%",
-                backgroundColor: "#c8913a",
-                borderRadius: "inherit",
-              }}
-            />
-          </div>
+          {!progress.unknownTotal && progress.pct > 0 && (
+            <div className="mt-2 flex items-center gap-2">
+              <LinearProgress
+                value={progress.fraction}
+                thickness={3}
+                className="max-w-[120px]"
+              />
+              <span className="md-label-small text-on-surface-variant">
+                {progress.pct}%
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Reactions */}
-      <div className="flex gap-2 mt-3">
+      <div className="mt-3 flex gap-2">
         {REACTIONS.map(({ key, label }) => (
-          <button
+          <Chip
             key={key}
+            selected={myReaction === key}
             onClick={() => handleReaction(key)}
-            className="flex items-center gap-1.5 text-xs px-3 py-1 rounded-full transition-colors"
-            style={{
-              backgroundColor: myReaction === key ? "var(--app-accent-light)" : "transparent",
-              border: `1px solid ${myReaction === key ? "var(--amber)" : "var(--border-default)"}`,
-              color: myReaction === key ? "var(--espresso)" : "var(--text-muted)",
-              fontFamily: "var(--font-inter)",
-              fontWeight: myReaction === key ? 600 : 400,
-            }}
           >
             <span>{label}</span>
             {(reactions[key] ?? 0) > 0 && (
-              <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-                {reactions[key]}
-              </span>
+              <span className="opacity-70">{reactions[key]}</span>
             )}
-          </button>
+          </Chip>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }

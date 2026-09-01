@@ -6,51 +6,17 @@ export default async function LoginPage() {
   if (session?.user) redirect("/");
 
   return (
-    <div
-      className="min-h-dvh flex flex-col"
-      style={{ backgroundColor: "#3b2412" }}
-    >
-      {/* Top brand zone */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 pb-8">
-        <div className="flex flex-col items-center gap-6 w-full max-w-sm">
-          {/* Logo mark */}
-          <div
-            className="flex items-center justify-center rounded-full"
-            style={{
-              width: 72,
-              height: 72,
-              background: "rgba(200,145,58,0.2)",
-              border: "2px solid rgba(200,145,58,0.45)",
-            }}
-          >
-            <span style={{ fontSize: 32 }}>📖</span>
+    <div className="flex min-h-dvh flex-col bg-surface">
+      <div className="flex flex-1 flex-col items-center justify-center px-6 pb-8">
+        <div className="flex w-full max-w-sm flex-col items-center gap-6">
+          <div className="flex size-[72px] items-center justify-center rounded-corner-lg bg-primary-container text-[32px]">
+            📖
           </div>
-
-          <div className="flex flex-col items-center gap-2">
-            <h1
-              className="font-serif font-semibold text-center"
-              style={{ fontSize: 38, color: "#ffffff", letterSpacing: "-0.02em" }}
-            >
-              Pagebet
-            </h1>
-            {/* Amber underline */}
-            <div
-              style={{
-                width: 52,
-                height: 4,
-                backgroundColor: "#c8913a",
-                borderRadius: 2,
-              }}
-            />
+          <div className="flex flex-col items-center gap-3">
+            <h1 className="md-display-medium text-on-surface">Pagebet</h1>
+            <div className="h-1 rounded-corner-full bg-primary" style={{ width: 52 }} />
           </div>
-
-          <p
-            className="text-sm text-center leading-relaxed"
-            style={{
-              color: "rgba(255,255,255,0.6)",
-              fontFamily: "var(--font-inter)",
-            }}
-          >
+          <p className="text-center md-body-large text-on-surface-variant">
             Track pages. Share progress.
             <br />
             Hold each other accountable.
@@ -58,25 +24,13 @@ export default async function LoginPage() {
         </div>
       </div>
 
-      {/* Bottom sign-in card */}
       <div
-        className="px-5 pt-8 pb-10 flex flex-col gap-4"
-        style={{
-          backgroundColor: "#fdf5e6",
-          borderRadius: "28px 28px 0 0",
-        }}
+        className="flex flex-col gap-4 rounded-t-[28px] bg-surface-container px-5 pt-8"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 32px)" }}
       >
-        <p
-          className="text-[10px] font-semibold uppercase text-center"
-          style={{
-            letterSpacing: "0.1em",
-            color: "#9c826a",
-            fontFamily: "var(--font-inter)",
-          }}
-        >
+        <p className="text-center md-label-medium text-on-surface-variant">
           Sign in to continue
         </p>
-
         <form
           action={async () => {
             "use server";
@@ -85,14 +39,9 @@ export default async function LoginPage() {
         >
           <button
             type="submit"
-            className="w-full flex items-center justify-center gap-3 px-6 py-4 rounded-[4px] font-semibold text-sm transition-opacity hover:opacity-90"
-            style={{
-              backgroundColor: "#3b2412",
-              color: "#ffffff",
-              fontFamily: "var(--font-inter)",
-            }}
+            className="md-state-layer flex w-full items-center justify-center gap-3 rounded-corner-full bg-primary px-6 py-4 md-label-large text-on-primary"
           >
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" className="z-[1]">
               <path
                 d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.875 2.684-6.615z"
                 fill="#4285F4"
@@ -110,14 +59,10 @@ export default async function LoginPage() {
                 fill="#EA4335"
               />
             </svg>
-            Continue with Google
+            <span className="z-[1]">Continue with Google</span>
           </button>
         </form>
-
-        <p
-          className="text-xs text-center"
-          style={{ color: "#9c826a", fontFamily: "var(--font-inter)" }}
-        >
+        <p className="text-center md-body-small text-on-surface-variant">
           No password needed. Sign in with your Google account.
         </p>
       </div>

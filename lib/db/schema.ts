@@ -113,6 +113,7 @@ export const books = pgTable(
     authors: text("authors").array(),
     coverUrl: text("cover_url"),
     totalPages: integer("total_pages"),
+    currentPage: integer("current_page").notNull().default(0),
     finished: boolean("finished").notNull().default(false),
     addedAt: timestamp("added_at").notNull().defaultNow(),
   },

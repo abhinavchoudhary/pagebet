@@ -1,5 +1,8 @@
 import Link from "next/link";
 
+import { Card } from "@/components/ui/card";
+import { LinearProgress } from "@/components/ui/linear-progress";
+
 interface Member {
   user_id: string;
   display_name: string;
@@ -17,69 +20,67 @@ interface ChallengeCardProps {
   currentUserId?: string;
 }
 
-export function ChallengeCard({ id, name, members, currentUserId }: ChallengeCardProps) {
+export function ChallengeCard({
+  id,
+  name,
+  members,
+  currentUserId,
+}: ChallengeCardProps) {
+  const myRank =
+    members.findIndex((m) => m.user_id === currentUserId) + 1;
+
   return (
-    <Link
-      href={`/challenges/${id}`}
-      className="block rounded-[4px] p-4"
-      style={{
-        backgroundColor: "var(--cream)",
-        boxShadow: "var(--shadow-card)",
-        border: "1px solid var(--border-default)",
-      }}
-    >
-      <p className="font-serif font-semibold mb-1" style={{ fontSize: 17, color: "var(--espresso)" }}>
-        {name}
-      </p>
-      <p className="text-[11px] mb-3" style={{ color: "var(--text-secondary)", fontFamily: "var(--font-inter)" }}>
-        {members.length} reader{members.length !== 1 ? "s" : ""}
-      </p>
-      <div className="flex flex-col gap-2">
-        {members.map((m, i) => {
-          const pct = Math.min(1, m.pages_this_week / m.weekly_goal);
-          const isMe = m.user_id === currentUserId;
-          const isLeader = i === 0;
-          const barColor = isLeader ? "#c8913a" : isMe ? "#7a4a1e" : "#9c826a";
-          return (
-            <div key={m.user_id} className="flex items-center gap-2">
-              <div
-                className="flex items-center justify-center shrink-0 text-[10px] font-semibold"
-                style={{
-                  width: 22, height: 22, borderRadius: "50%",
-                  backgroundColor: isMe ? "rgba(200,145,58,0.18)" : "#e4d8c4",
-                  color: isMe ? "#c8913a" : "#9c826a",
-                  fontFamily: "var(--font-inter)",
-                }}
-              >
-                {m.display_name[0]?.toUpperCase()}
-              </div>
-              <div
-                className="flex-1 rounded-full overflow-hidden"
-                style={{ height: 5, backgroundColor: "#dfd0b8" }}
-              >
-                <div
-                  style={{
-                    height: "100%",
-                    width: `${pct * 100}%`,
-                    backgroundColor: barColor,
-                    borderRadius: "inherit",
-                  }}
+    <Card variant="elevated" className="overflow-hidden">
+
+      <Link
+        href={`/challenges/${id}`}
+        className="md-state-layer block rounded-corner-lg p-4"
+      >
+        <div className="mb-1 flex items-start justify-between gap-2">
+          <p className="md-title-large text-on-surface">{name}</p>
+          {myRank > 0 && (
+            <span className="shrink-0 rounded-corner-xs bg-primary px-1.5 py-0.5 md-label-small text-on-primary">
+              #{myRank}
+            </span>
+          )}
+        </div>
+        <p className="mb-3 md-body-small text-on-surface-variant">
+          {members.length} reader{members.length !== 1 ? "s" : ""}
+        </p>
+
+        <div className="flex flex-col gap-2">
+          {members.slice(0, 4).map((m, i) => {
+            const frac = Math.min(1, m.pages_this_week / m.weekly_goal);
+            const isMe = m.user_id === currentUserId;
+            const isLeader = i === 0;
+            return (
+              <div key={m.user_id} className="flex items-center gap-2">
+                <div className="flex size-6 shrink-0 items-center justify-center rounded-corner-full bg-surface-container-highest md-label-small text-on-surface-variant">
+                  {m.display_name[0]?.toUpperCase()}
+                </div>
+                <LinearProgress
+                  value={frac}
+                  thickness={5}
+                  indicatorClassName={
+                    isLeader
+                      ? "bg-primary"
+                      : isMe
+                        ? "bg-secondary"
+                        : "bg-outline"
+                  }
                 />
+                <span
+                  className={`w-7 text-right tabular-nums md-body-small ${
+                    isMe ? "font-semibold text-on-surface" : "text-on-surface-variant"
+                  }`}
+                >
+                  {m.pages_this_week}
+                </span>
               </div>
-              <span
-                className="text-[11px] tabular-nums w-7 text-right"
-                style={{
-                  color: isMe ? "var(--espresso)" : "var(--text-muted)",
-                  fontWeight: isMe ? 600 : 400,
-                  fontFamily: "var(--font-inter)",
-                }}
-              >
-                {m.pages_this_week}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </Link>
+            );
+          })}
+        </div>
+      </Link>
+    </Card>
   );
 }

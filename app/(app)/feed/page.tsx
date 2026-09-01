@@ -17,19 +17,16 @@ export default async function FeedPage() {
 
   const userId = session.user.id;
 
-  // Subquery: challenge IDs the current user belongs to
   const myChallengIds = db
     .select({ challengeId: challengeMembers.challengeId })
     .from(challengeMembers)
     .where(eq(challengeMembers.userId, userId));
 
-  // Subquery: all user IDs in those challenges (includes self)
   const peerUserIds = db
     .selectDistinct({ userId: challengeMembers.userId })
     .from(challengeMembers)
     .where(inArray(challengeMembers.challengeId, myChallengIds));
 
-  // Single query: sessions from all peers (3 sequential queries → 1)
   const sessions = await db
     .select({
       id: readingSessions.id,
@@ -39,6 +36,8 @@ export default async function FeedPage() {
       bookTitle: books.title,
       bookCoverUrl: books.coverUrl,
       bookAuthors: books.authors,
+      bookCurrentPage: books.currentPage,
+      bookTotalPages: books.totalPages,
       userName: users.name,
       userImage: users.image,
     })
@@ -70,16 +69,15 @@ export default async function FeedPage() {
   }
 
   return (
-    <div className="flex flex-col gap-5 px-4" style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 24px)" }}>
-      <div className="flex items-center justify-between">
-        <h1 className="font-serif font-semibold" style={{ fontSize: 24, color: "var(--espresso)" }}>
-          Feed
-        </h1>
-      </div>
+    <div
+      className="flex flex-col gap-4 px-4"
+      style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 20px)" }}
+    >
+      <h1 className="px-1 md-headline-medium text-on-surface">Feed</h1>
 
       {sessions.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 py-16">
-          <p className="font-serif text-lg text-center" style={{ color: "var(--text-secondary)" }}>
+        <div className="flex flex-col items-center gap-3 py-16 text-center">
+          <p className="md-title-large text-on-surface-variant">
             The story begins when someone logs a session
           </p>
         </div>
@@ -94,6 +92,8 @@ export default async function FeedPage() {
             bookTitle={s.bookTitle}
             bookCoverUrl={s.bookCoverUrl ?? null}
             bookAuthor={s.bookAuthors?.[0] ?? null}
+            bookCurrentPage={s.bookCurrentPage}
+            bookTotalPages={s.bookTotalPages}
             pagesRead={s.pagesRead}
             loggedAt={s.loggedAt.toISOString()}
             reactions={reactionsBySession[s.id] ?? {}}

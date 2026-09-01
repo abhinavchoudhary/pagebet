@@ -1,30 +1,23 @@
 export default function FeedLoading() {
   return (
     <div
-      className="flex flex-col gap-5 px-4 animate-pulse"
+      className="flex animate-pulse flex-col gap-4 px-4"
       style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 24px)" }}
     >
-      {/* Header */}
-      <div className="h-7 w-16 rounded" style={{ backgroundColor: "#dfd0b8" }} />
-
-      {/* Feed item skeletons */}
+      <div className="h-8 w-20 rounded-corner-xs bg-surface-container-highest" />
       {[...Array(4)].map((_, i) => (
         <div
           key={i}
-          className="rounded-[4px] p-4 flex gap-3"
-          style={{ backgroundColor: "var(--cream)", border: "1px solid var(--border-default)" }}
+          className="rounded-corner-lg bg-surface-container-low p-4 md-elevation-1"
         >
-          {/* Book cover */}
-          <div
-            className="shrink-0 w-10 rounded-[4px]"
-            style={{ aspectRatio: "2/3", backgroundColor: "#dfd0b8" }}
-          />
-          {/* Text */}
-          <div className="flex flex-col gap-2 flex-1 justify-center">
-            <div className="h-3 w-3/4 rounded" style={{ backgroundColor: "#dfd0b8" }} />
-            <div className="h-2.5 w-1/2 rounded" style={{ backgroundColor: "#dfd0b8" }} />
-            <div className="h-2.5 w-2/3 rounded" style={{ backgroundColor: "#dfd0b8" }} />
+          <div className="mb-3 flex items-center gap-3">
+            <div className="size-9 rounded-corner-full bg-surface-container-highest" />
+            <div className="flex flex-col gap-1.5">
+              <div className="h-3 w-24 rounded-corner-xs bg-surface-container-highest" />
+              <div className="h-2.5 w-16 rounded-corner-xs bg-surface-container-highest" />
+            </div>
           </div>
+          <div className="h-20 rounded-corner-md bg-surface-container-highest" />
         </div>
       ))}
     </div>

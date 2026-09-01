@@ -3,8 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createChallenge } from "@/lib/actions/challenges";
-import { ChevronLeft } from "lucide-react";
-import Link from "next/link";
+
+import { TopAppBar } from "@/components/ui/top-app-bar";
+import { TextField } from "@/components/ui/text-field";
+import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/lib/toast";
 
 export default function NewChallengePage() {
   const router = useRouter();
@@ -15,13 +19,11 @@ export default function NewChallengePage() {
   const [penaltyCurrency, setPenaltyCurrency] = useState("₹");
   const [carryOver, setCarryOver] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
     setSaving(true);
-    setError("");
     try {
       const { id } = await createChallenge({
         name: name.trim(),
@@ -33,192 +35,91 @@ export default function NewChallengePage() {
       });
       router.push(`/challenges/${id}`);
     } catch (err: unknown) {
-      setError((err as Error)?.message ?? "Something went wrong");
+      toast.error((err as Error)?.message ?? "Something went wrong");
       setSaving(false);
     }
   }
 
   return (
-    <div className="flex flex-col gap-6 px-4 pt-6">
-      <div className="flex items-center gap-3">
-        <Link href="/">
-          <ChevronLeft size={20} style={{ color: "var(--text-secondary)" }} />
-        </Link>
-        <h1
-          className="font-serif font-semibold"
-          style={{ fontSize: 24, color: "var(--espresso)" }}
-        >
-          New challenge
-        </h1>
-      </div>
+    <div className="flex flex-col">
+      <TopAppBar backHref="/" title="New challenge" />
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-        <Field label="Challenge name">
-          <input
-            required
-            className="w-full rounded-[4px] px-3 py-2.5 text-sm outline-none"
-            style={{
-              backgroundColor: "var(--cream)",
-              color: "var(--text-primary)",
-              border: "1px solid var(--border-default)",
-              fontFamily: "var(--font-inter)",
-            }}
-            placeholder="e.g. Book Club — 2026"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </Field>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-6 px-4 py-4">
+        <TextField
+          label="Challenge name"
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Book Club — 2026"
+        />
+        <TextField
+          label="Description (optional)"
+          multiline
+          rows={3}
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+        />
 
-        <Field label="Description (optional)">
-          <textarea
-            className="w-full rounded-[4px] px-3 py-2.5 text-sm outline-none resize-none"
-            style={{
-              backgroundColor: "var(--cream)",
-              color: "var(--text-primary)",
-              border: "1px solid var(--border-default)",
-              fontFamily: "var(--font-inter)",
-            }}
-            rows={3}
-            placeholder="Any notes about this challenge…"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </Field>
-
-        <Field
-          label={`Daily page goal — ${dailyGoal} pages (${dailyGoal * 7}/week)`}
-        >
+        <div className="flex flex-col gap-2">
+          <label className="md-label-medium text-on-surface-variant">
+            Daily page goal — {dailyGoal} pages ({dailyGoal * 7}/week)
+          </label>
           <input
             type="range"
             min={1}
             max={50}
             value={dailyGoal}
             onChange={(e) => setDailyGoal(Number(e.target.value))}
-            className="w-full"
-            style={{ accentColor: "#7a4a1e" }}
+            className="w-full accent-[var(--md-sys-color-primary)]"
           />
-          <div
-            className="flex justify-between text-xs mt-1"
-            style={{ color: "var(--text-muted)", fontFamily: "var(--font-inter)" }}
-          >
+          <div className="flex justify-between md-body-small text-on-surface-variant">
             <span>1/day</span>
             <span>50/day</span>
           </div>
-        </Field>
-
-        <div className="flex gap-3">
-          <Field label="Currency" className="w-24 shrink-0">
-            <input
-              className="w-full rounded-[4px] px-3 py-2.5 text-sm outline-none text-center"
-              style={{
-                backgroundColor: "var(--cream)",
-                color: "var(--text-primary)",
-                border: "1px solid var(--border-default)",
-                fontFamily: "var(--font-inter)",
-              }}
-              value={penaltyCurrency}
-              onChange={(e) => setPenaltyCurrency(e.target.value)}
-              maxLength={3}
-            />
-          </Field>
-          <Field label="Penalty per missed page" className="flex-1">
-            <input
-              type="number"
-              min={0}
-              className="w-full rounded-[4px] px-3 py-2.5 text-sm outline-none"
-              style={{
-                backgroundColor: "var(--cream)",
-                color: "var(--text-primary)",
-                border: "1px solid var(--border-default)",
-                fontFamily: "var(--font-inter)",
-              }}
-              value={penaltyAmount}
-              onChange={(e) => setPenaltyAmount(Number(e.target.value))}
-            />
-          </Field>
         </div>
 
-        <div
-          className="flex items-center justify-between py-3 px-4 rounded-[4px]"
-          style={{
-            backgroundColor: "var(--cream)",
-            border: "1px solid var(--border-default)",
-          }}
-        >
+        <div className="flex gap-3">
+          <TextField
+            label="Currency"
+            value={penaltyCurrency}
+            maxLength={3}
+            onChange={(e) => setPenaltyCurrency(e.target.value)}
+            containerClassName="w-24 shrink-0"
+          />
+          <TextField
+            label="Penalty per missed page"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            value={penaltyAmount}
+            onChange={(e) => setPenaltyAmount(Number(e.target.value))}
+            containerClassName="flex-1"
+          />
+        </div>
+
+        <div className="flex items-center justify-between rounded-corner-md bg-surface-container-low px-4 py-3">
           <div>
-            <p
-              className="text-sm font-medium"
-              style={{ color: "var(--text-primary)", fontFamily: "var(--font-inter)" }}
-            >
-              Surplus carry-over
-            </p>
-            <p
-              className="text-xs mt-0.5"
-              style={{ color: "var(--text-muted)", fontFamily: "var(--font-inter)" }}
-            >
+            <p className="md-body-large text-on-surface">Surplus carry-over</p>
+            <p className="md-body-small text-on-surface-variant">
               Extra pages roll to next week
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => setCarryOver((v) => !v)}
-            className="relative w-11 h-6 rounded-full transition-colors"
-            style={{
-              backgroundColor: carryOver ? "#7a4a1e" : "var(--bg-subtle)",
-              border: "1px solid var(--border-default)",
-            }}
-          >
-            <span
-              className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform"
-              style={{ transform: carryOver ? "translateX(20px)" : "translateX(0)" }}
-            />
-          </button>
+          <Switch
+            checked={carryOver}
+            onCheckedChange={setCarryOver}
+            aria-label="Surplus carry-over"
+          />
         </div>
 
-        {error && (
-          <p
-            className="text-sm text-center"
-            style={{ color: "var(--penalty)", fontFamily: "var(--font-inter)" }}
-          >
-            {error}
-          </p>
-        )}
-
-        <button
+        <Button
           type="submit"
+          size="lg"
           disabled={saving || !name.trim()}
-          className="w-full py-3.5 rounded-[4px] text-base font-semibold text-white disabled:opacity-40"
-          style={{ backgroundColor: "var(--sienna)", fontFamily: "var(--font-inter)" }}
+          className="w-full"
         >
           {saving ? "Creating…" : "Create challenge"}
-        </button>
+        </Button>
       </form>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  children,
-  className = "",
-}: {
-  label: string;
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <div className={`flex flex-col gap-1.5 ${className}`}>
-      <label
-        className="text-[10px] font-semibold uppercase"
-        style={{
-          letterSpacing: "0.1em",
-          color: "var(--text-muted)",
-          fontFamily: "var(--font-inter)",
-        }}
-      >
-        {label}
-      </label>
-      {children}
     </div>
   );
 }

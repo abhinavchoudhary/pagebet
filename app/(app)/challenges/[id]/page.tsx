@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, Settings } from "lucide-react";
+import { ArrowLeft, Settings } from "lucide-react";
 import { db } from "@/lib/db";
 import {
   challenges,
@@ -17,6 +17,8 @@ import { Leaderboard } from "@/components/leaderboard";
 import { InviteHeaderButton } from "@/components/invite-header-button";
 import { FeedItem } from "@/components/feed-item";
 import { ScrollToTop } from "@/components/scroll-to-top";
+import { Card } from "@/components/ui/card";
+import { LinearProgress } from "@/components/ui/linear-progress";
 import { getRollingWeek } from "@/lib/rolling-week";
 import { computePenalty } from "@/lib/penalty";
 
@@ -31,13 +33,17 @@ export default async function ChallengePage({
 
   const userId = session.user.id;
 
-  // Round 1: fetch challenge, membership, and members in parallel
   const [[challenge], [membership], members] = await Promise.all([
     db.select().from(challenges).where(eq(challenges.id, id)),
     db
       .select({ joinedAt: challengeMembers.joinedAt })
       .from(challengeMembers)
-      .where(and(eq(challengeMembers.challengeId, id), eq(challengeMembers.userId, userId))),
+      .where(
+        and(
+          eq(challengeMembers.challengeId, id),
+          eq(challengeMembers.userId, userId)
+        )
+      ),
     db
       .select({
         userId: challengeMembers.userId,
@@ -55,9 +61,7 @@ export default async function ChallengePage({
 
   const now = new Date();
 
-  // Round 2: all remaining data in parallel — single batched credits query instead of N queries
   const [allCredits, challengeBooks, recentSessions] = await Promise.all([
-    // One query for ALL credits in this challenge, grouped by user+week
     db
       .select({
         userId: challengeSessionCredits.userId,
@@ -66,8 +70,10 @@ export default async function ChallengePage({
       })
       .from(challengeSessionCredits)
       .where(eq(challengeSessionCredits.challengeId, id))
-      .groupBy(challengeSessionCredits.userId, challengeSessionCredits.weekStart),
-
+      .groupBy(
+        challengeSessionCredits.userId,
+        challengeSessionCredits.weekStart
+      ),
     db
       .selectDistinct({
         userId: readingSessions.userId,
@@ -75,6 +81,8 @@ export default async function ChallengePage({
         title: books.title,
         coverUrl: books.coverUrl,
         finished: books.finished,
+        currentPage: books.currentPage,
+        totalPages: books.totalPages,
       })
       .from(books)
       .innerJoin(readingSessions, eq(readingSessions.bookId, books.id))
@@ -85,7 +93,6 @@ export default async function ChallengePage({
           eq(challengeSessionCredits.challengeId, id)
         )
       ),
-
     db
       .select({
         id: readingSessions.id,
@@ -95,6 +102,8 @@ export default async function ChallengePage({
         bookTitle: books.title,
         bookCoverUrl: books.coverUrl,
         bookAuthors: books.authors,
+        bookCurrentPage: books.currentPage,
+        bookTotalPages: books.totalPages,
         userName: users.name,
         userImage: users.image,
       })
@@ -112,7 +121,6 @@ export default async function ChallengePage({
       .limit(20),
   ]);
 
-  // Compute leaderboard in JS from the batched credits
   const leaderboard = members.map((m) => {
     const { weekStart } = getRollingWeek(m.joinedAt, now);
     const weekStartStr = weekStart.toISOString().split("T")[0];
@@ -137,19 +145,24 @@ export default async function ChallengePage({
 
   const allTimePagesMap: Record<string, number> = {};
   for (const c of allCredits) {
-    allTimePagesMap[c.userId] = (allTimePagesMap[c.userId] ?? 0) + Number(c.total ?? 0);
+    allTimePagesMap[c.userId] =
+      (allTimePagesMap[c.userId] ?? 0) + Number(c.total ?? 0);
   }
 
-  // Fetch reactions for the recent sessions
   const sessionIds = recentSessions.map((s) => s.id);
-  const allReactions = sessionIds.length > 0
-    ? await db.select().from(feedReactions).where(inArray(feedReactions.sessionId, sessionIds))
-    : [];
+  const allReactions =
+    sessionIds.length > 0
+      ? await db
+          .select()
+          .from(feedReactions)
+          .where(inArray(feedReactions.sessionId, sessionIds))
+      : [];
   const reactionsBySession: Record<string, Record<string, number>> = {};
   const myReactionBySession: Record<string, string | null> = {};
   for (const r of allReactions) {
     if (!reactionsBySession[r.sessionId]) reactionsBySession[r.sessionId] = {};
-    reactionsBySession[r.sessionId][r.emoji] = (reactionsBySession[r.sessionId][r.emoji] ?? 0) + 1;
+    reactionsBySession[r.sessionId][r.emoji] =
+      (reactionsBySession[r.sessionId][r.emoji] ?? 0) + 1;
     if (r.userId === userId) myReactionBySession[r.sessionId] = r.emoji;
   }
 
@@ -170,388 +183,228 @@ export default async function ChallengePage({
   );
 
   const myEntry = sortedLeaderboard.find((e) => e.user_id === userId);
-  const pct =
+  const frac =
     myEntry && myEntry.weekly_goal > 0
-      ? Math.min(100, Math.round((myEntry.pages_this_week / myEntry.weekly_goal) * 100))
+      ? Math.min(1, myEntry.pages_this_week / myEntry.weekly_goal)
       : 0;
 
   return (
     <div className="flex flex-col">
       <ScrollToTop />
-      {/* ── Dark espresso header ── */}
-      <div
-        className="relative px-5"
-        style={{ backgroundColor: "#3b2412", paddingBottom: "52px", paddingTop: "calc(env(safe-area-inset-top, 0px) + 20px)" }}
+
+      {/* ── Header ── */}
+      <header
+        className="rounded-b-[28px] bg-surface-container-highest px-5 pb-6"
+        style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 12px)" }}
       >
-        {/* Back row */}
-        <div className="flex items-center justify-between mb-5">
+        <div className="mb-4 flex items-center justify-between">
           <Link
             href="/"
-            className="flex items-center gap-1"
-            style={{ color: "rgba(255,255,255,0.6)" }}
+            className="md-state-layer -ml-2 flex size-10 items-center justify-center rounded-corner-full text-on-surface"
+            aria-label="Back"
           >
-            <ChevronLeft size={18} />
-            <span
-              className="text-[13px]"
-              style={{ fontFamily: "var(--font-inter)" }}
-            >
-              Back
-            </span>
+            <ArrowLeft className="size-6" />
           </Link>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1">
             {challenge.inviteActive && <InviteHeaderButton url={inviteUrl} />}
             {isCreator && (
-              <Link href={`/challenges/${id}/settings`}>
-                <Settings size={20} style={{ color: "rgba(255,255,255,0.6)" }} />
+              <Link
+                href={`/challenges/${id}/settings`}
+                aria-label="Settings"
+                className="md-state-layer flex size-10 items-center justify-center rounded-corner-full text-on-surface-variant"
+              >
+                <Settings className="z-[1] size-5" />
               </Link>
             )}
           </div>
         </div>
 
-        {/* Challenge title */}
-        <h1
-          className="font-serif font-semibold leading-tight"
-          style={{ fontSize: 28, color: "#ffffff" }}
-        >
-          {challenge.name}
-        </h1>
-
-        {/* Metadata row */}
-        <div
-          className="flex items-center gap-3 mt-2"
-          style={{ fontFamily: "var(--font-inter)" }}
-        >
-          <span className="text-[13px] font-bold" style={{ color: "#c8913a" }}>
+        <h1 className="md-headline-medium text-on-surface">{challenge.name}</h1>
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 md-body-small text-on-surface-variant">
+          <span className="font-semibold text-primary">
             {challenge.penaltyCurrency}
             {Number(challenge.penaltyAmount)}/pg
           </span>
-          <span
-            className="text-[13px]"
-            style={{ color: "rgba(255,255,255,0.5)" }}
-          >
-            {members.length} readers
-          </span>
-          <span
-            className="text-[13px]"
-            style={{ color: "rgba(255,255,255,0.5)" }}
-          >
-            {challenge.weeklyGoal} pg/week goal
-          </span>
+          <span>{members.length} readers</span>
+          <span>{challenge.weeklyGoal} pg/week goal</span>
         </div>
-      </div>
+      </header>
 
-      {/* ── Ivory panel ── */}
-      <div
-        className="flex flex-col gap-5 px-5 pt-8 flex-1 relative"
-        style={{
-          backgroundColor: "#fdf5e6",
-          borderRadius: "28px 28px 0 0",
-          marginTop: -28,
-          zIndex: 1,
-        }}
-      >
-        {/* Your progress card */}
+      <div className="flex flex-col gap-6 px-5 py-6">
+        {/* Your progress */}
         {myEntry && (
-          <div>
-            <p
-              className="text-[10px] font-semibold uppercase mb-3"
-              style={{
-                letterSpacing: "0.1em",
-                color: "#9c826a",
-                fontFamily: "var(--font-inter)",
-              }}
-            >
-              Your Progress This Week
+          <section>
+            <p className="mb-3 md-label-medium text-on-surface-variant">
+              Your progress this week
             </p>
-            <div
-              className="rounded-[4px] p-4"
-              style={{
-                backgroundColor: "#fefaf2",
-                boxShadow: "0 4px 20px rgba(59,36,18,0.09)",
-              }}
-            >
-              <div className="flex items-end justify-between mb-3">
-                <div className="flex items-baseline gap-2">
-                  <span
-                    className="font-serif font-semibold"
-                    style={{ fontSize: 38, color: "#3b2412", lineHeight: 1 }}
-                  >
-                    {myEntry.pages_this_week}
-                  </span>
-                  <span
-                    className="text-[15px]"
-                    style={{ color: "#5a3e28", fontFamily: "var(--font-inter)" }}
-                  >
+            <Card variant="elevated" className="p-4">
+              <div className="mb-3 flex items-end justify-between">
+                <p className="md-headline-small text-on-surface">
+                  {myEntry.pages_this_week}
+                  <span className="md-body-medium text-on-surface-variant">
+                    {" "}
                     / {myEntry.weekly_goal} pg
                   </span>
-                </div>
-                <span
-                  className="text-sm font-bold"
-                  style={{ color: "#7a4a1e", fontFamily: "var(--font-inter)" }}
-                >
-                  {pct}%
+                </p>
+                <span className="md-label-large text-primary">
+                  {Math.round(frac * 100)}%
                 </span>
               </div>
-              <div
-                className="rounded-full overflow-hidden mb-3"
-                style={{ height: 8, backgroundColor: "#dfd0b8" }}
-              >
-                <div
-                  style={{
-                    height: "100%",
-                    width: `${pct}%`,
-                    backgroundColor: "#c8913a",
-                    borderRadius: "inherit",
-                  }}
-                />
-              </div>
+              <LinearProgress value={frac} thickness={8} />
               {myEntry.pages_this_week < myEntry.weekly_goal && (
-                <p
-                  className="text-xs"
-                  style={{ color: "#5a3e28", fontFamily: "var(--font-inter)" }}
-                >
-                  Need{" "}
-                  {myEntry.weekly_goal - myEntry.pages_this_week} more pages
+                <p className="mt-3 md-body-small text-on-surface-variant">
+                  Need {myEntry.weekly_goal - myEntry.pages_this_week} more pages
                 </p>
               )}
-            </div>
-          </div>
+            </Card>
+          </section>
         )}
 
         {challenge.description && (
-          <p
-            className="text-sm leading-relaxed"
-            style={{
-              color: "var(--text-secondary)",
-              fontFamily: "var(--font-inter)",
-            }}
-          >
+          <p className="md-body-medium text-on-surface-variant">
             {challenge.description}
           </p>
         )}
 
-        {/* This week leaderboard */}
-        <div>
-          <p
-            className="text-[10px] font-semibold uppercase mb-3"
-            style={{
-              letterSpacing: "0.1em",
-              color: "#9c826a",
-              fontFamily: "var(--font-inter)",
-            }}
-          >
-            Group Standings
+        <section>
+          <p className="mb-3 md-label-medium text-on-surface-variant">
+            Group standings
           </p>
           <Leaderboard
             entries={sortedLeaderboard}
             penaltyCurrency={challenge.penaltyCurrency}
             currentUserId={userId}
           />
-        </div>
+        </section>
 
-        {/* All-time stats */}
-        <div>
-          <p
-            className="text-[10px] font-semibold uppercase mb-3"
-            style={{
-              letterSpacing: "0.1em",
-              color: "#9c826a",
-              fontFamily: "var(--font-inter)",
-            }}
-          >
-            All-time
-          </p>
-          <div
-            className="rounded-[4px] overflow-hidden"
-            style={{ border: "1px solid var(--border-default)" }}
-          >
+        {/* All-time */}
+        <section>
+          <p className="mb-3 md-label-medium text-on-surface-variant">All-time</p>
+          <div className="overflow-hidden rounded-corner-lg border border-outline-variant">
             {allTimeSorted.map((m, i) => {
               const total = allTimePagesMap[m.userId] ?? 0;
               const daysSinceJoined = Math.max(
                 1,
-                Math.ceil(
-                  (now.getTime() - m.joinedAt.getTime()) / 86400000
-                )
+                Math.ceil((now.getTime() - m.joinedAt.getTime()) / 86400000)
               );
-              const avgDaily =
-                total > 0 ? Math.round(total / daysSinceJoined) : 0;
+              const avgDaily = total > 0 ? Math.round(total / daysSinceJoined) : 0;
               const isMe = m.userId === userId;
-
               return (
                 <div
                   key={m.userId}
                   className="flex items-center gap-3 px-4 py-3"
                   style={{
-                    backgroundColor: isMe ? "var(--cream)" : "var(--old-lace)",
+                    backgroundColor: isMe
+                      ? "var(--md-sys-color-surface-container-highest)"
+                      : "var(--md-sys-color-surface-container-low)",
                     borderTop:
                       i === 0
-                        ? "none"
-                        : isMe
-                        ? "2px solid #c8913a"
-                        : "1px solid var(--border-default)",
-                    borderLeft: isMe ? "3px solid #c8913a" : "none",
+                        ? undefined
+                        : "1px solid var(--md-sys-color-outline-variant)",
                   }}
                 >
-                  <span
-                    className="text-sm tabular-nums w-5 text-center shrink-0"
-                    style={{
-                      color: "var(--text-muted)",
-                      fontFamily: "var(--font-inter)",
-                    }}
-                  >
+                  <span className="w-5 shrink-0 text-center tabular-nums md-body-small text-on-surface-variant">
                     {i + 1}
                   </span>
                   {m.avatarUrl ? (
                     <img
                       src={m.avatarUrl}
                       alt={m.displayName ?? ""}
-                      className="w-7 h-7 rounded-full object-cover shrink-0"
+                      className="size-7 shrink-0 rounded-corner-full object-cover"
                     />
                   ) : (
-                    <div
-                      className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0"
-                      style={{
-                        backgroundColor: "#e4d8c4",
-                        color: "var(--text-muted)",
-                      }}
-                    >
+                    <div className="flex size-7 shrink-0 items-center justify-center rounded-corner-full bg-primary-container md-label-small text-on-primary-container">
                       {m.displayName?.[0]?.toUpperCase()}
                     </div>
                   )}
-                  <div className="flex-1 min-w-0">
+                  <div className="min-w-0 flex-1">
                     <p
-                      className="text-sm truncate"
-                      style={{
-                        color: isMe ? "var(--espresso)" : "var(--text-primary)",
-                        fontWeight: isMe ? 700 : 500,
-                        fontFamily: "var(--font-inter)",
-                      }}
+                      className={`truncate md-body-medium ${
+                        isMe ? "font-semibold text-on-surface" : "text-on-surface"
+                      }`}
                     >
                       {m.displayName?.split(" ")[0]}
                       {isMe ? " (you)" : ""}
                     </p>
-                    <p
-                      className="text-[11px]"
-                      style={{
-                        color: "var(--text-muted)",
-                        fontFamily: "var(--font-inter)",
-                      }}
-                    >
+                    <p className="md-body-small text-on-surface-variant">
                       {avgDaily} pg/day avg
                     </p>
                   </div>
-                  <span
-                    className="text-sm font-semibold tabular-nums"
-                    style={{
-                      color: isMe ? "var(--espresso)" : "var(--text-primary)",
-                      fontFamily: "var(--font-inter)",
-                    }}
-                  >
+                  <span className="tabular-nums md-title-small text-on-surface">
                     {total.toLocaleString()}
                   </span>
-                  <span
-                    className="text-[11px]"
-                    style={{
-                      color: "var(--text-muted)",
-                      fontFamily: "var(--font-inter)",
-                    }}
-                  >
-                    pg
-                  </span>
+                  <span className="md-body-small text-on-surface-variant">pg</span>
                 </div>
               );
             })}
           </div>
-        </div>
+        </section>
 
         {/* Bookshelves */}
         {Object.keys(booksByMember).length > 0 && (
-          <div>
-            <p
-              className="text-[10px] font-semibold uppercase mb-3"
-              style={{
-                letterSpacing: "0.1em",
-                color: "#9c826a",
-                fontFamily: "var(--font-inter)",
-              }}
-            >
+          <section>
+            <p className="mb-3 md-label-medium text-on-surface-variant">
               Bookshelves
             </p>
             <div className="flex flex-col gap-4">
               {members.map((m) => {
                 const memberBooks = booksByMember[m.userId];
                 if (!memberBooks?.length) return null;
-                const readingBooks = memberBooks.filter((b) => !b.finished);
-                const finishedBooks = memberBooks.filter((b) => b.finished);
                 const isMe = m.userId === userId;
-
                 return (
                   <div key={m.userId}>
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="mb-2 flex items-center gap-2">
                       {m.avatarUrl ? (
                         <img
                           src={m.avatarUrl}
-                          alt={m.displayName ?? ""}
-                          className="w-5 h-5 rounded-full object-cover"
+                          alt=""
+                          className="size-5 rounded-corner-full object-cover"
                         />
                       ) : (
-                        <div
-                          className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-semibold"
-                          style={{
-                            backgroundColor: "#e4d8c4",
-                            color: "var(--text-muted)",
-                          }}
-                        >
+                        <div className="flex size-5 items-center justify-center rounded-corner-full bg-primary-container text-[10px] text-on-primary-container">
                           {m.displayName?.[0]?.toUpperCase()}
                         </div>
                       )}
-                      <p
-                        className="text-xs font-medium"
-                        style={{
-                          color: "var(--text-secondary)",
-                          fontFamily: "var(--font-inter)",
-                        }}
-                      >
+                      <p className="md-body-small text-on-surface-variant">
                         {m.displayName?.split(" ")[0]}
                         {isMe ? " (you)" : ""}
                       </p>
                     </div>
                     <div className="flex gap-2 overflow-x-auto pb-1">
-                      {readingBooks.map((b) => (
-                        <BookCover
+                      {memberBooks.map((b) => (
+                        <div
                           key={b.bookId}
-                          title={b.title}
-                          coverUrl={b.coverUrl}
-                        />
-                      ))}
-                      {finishedBooks.map((b) => (
-                        <BookCover
-                          key={b.bookId}
-                          title={b.title}
-                          coverUrl={b.coverUrl}
-                          faded
-                        />
+                          className="w-12 shrink-0"
+                          style={{ opacity: b.finished ? 0.5 : 1 }}
+                        >
+                          {b.coverUrl ? (
+                            <img
+                              src={b.coverUrl}
+                              alt={b.title}
+                              className="w-12 rounded-corner-xs object-cover md-elevation-1"
+                              style={{ aspectRatio: "2 / 3" }}
+                            />
+                          ) : (
+                            <div
+                              className="w-12 rounded-corner-xs bg-primary-container"
+                              style={{ aspectRatio: "2 / 3" }}
+                            />
+                          )}
+                        </div>
                       ))}
                     </div>
                   </div>
                 );
               })}
             </div>
-          </div>
+          </section>
         )}
 
-        {/* Activity feed */}
+        {/* Activity */}
         {recentSessions.length > 0 && (
-          <div>
-            <p
-              className="text-[10px] font-semibold uppercase mb-3"
-              style={{
-                letterSpacing: "0.1em",
-                color: "#9c826a",
-                fontFamily: "var(--font-inter)",
-              }}
-            >
-              Recent Activity
+          <section>
+            <p className="mb-3 md-label-medium text-on-surface-variant">
+              Recent activity
             </p>
             <div className="flex flex-col gap-4">
               {recentSessions.map((s) => (
@@ -564,6 +417,8 @@ export default async function ChallengePage({
                   bookTitle={s.bookTitle}
                   bookCoverUrl={s.bookCoverUrl ?? null}
                   bookAuthor={s.bookAuthors?.[0] ?? null}
+                  bookCurrentPage={s.bookCurrentPage}
+                  bookTotalPages={s.bookTotalPages}
                   pagesRead={s.pagesRead}
                   loggedAt={s.loggedAt.toISOString()}
                   reactions={reactionsBySession[s.id] ?? {}}
@@ -572,37 +427,9 @@ export default async function ChallengePage({
                 />
               ))}
             </div>
-          </div>
+          </section>
         )}
       </div>
-    </div>
-  );
-}
-
-function BookCover({
-  title,
-  coverUrl,
-  faded,
-}: {
-  title: string;
-  coverUrl: string | null;
-  faded?: boolean;
-}) {
-  return (
-    <div className="shrink-0 w-12" style={{ opacity: faded ? 0.5 : 1 }}>
-      {coverUrl ? (
-        <img
-          src={coverUrl}
-          alt={title}
-          className="w-12 rounded-[4px] object-cover shadow-sm"
-          style={{ aspectRatio: "2/3" }}
-        />
-      ) : (
-        <div
-          className="w-12 rounded-[4px]"
-          style={{ aspectRatio: "2/3", backgroundColor: "var(--espresso)" }}
-        />
-      )}
     </div>
   );
 }

@@ -1,24 +1,22 @@
 "use client";
 
-import { useState } from "react";
-import { UserPlus, Check } from "lucide-react";
+import { UserPlus } from "lucide-react";
+
+import { toast } from "@/lib/toast";
 
 export function InviteHeaderButton({ url }: { url: string }) {
-  const [copied, setCopied] = useState(false);
-
   async function handleCopy() {
     await navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    toast.success("Invite link copied");
   }
 
   return (
     <button
       onClick={handleCopy}
       aria-label="Copy invite link"
-      style={{ color: copied ? "#4ade80" : "rgba(255,255,255,0.6)", lineHeight: 0 }}
+      className="md-state-layer flex size-10 items-center justify-center rounded-corner-full text-on-surface-variant"
     >
-      {copied ? <Check size={20} /> : <UserPlus size={20} />}
+      <UserPlus className="z-[1] size-5" />
     </button>
   );
 }

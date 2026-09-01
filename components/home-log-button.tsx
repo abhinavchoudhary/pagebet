@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { LogSessionDrawer } from "@/components/log-session-drawer";
 import { Plus } from "lucide-react";
+
+import { LogSessionDrawer } from "@/components/log-session-drawer";
 
 interface Book {
   id: string;
@@ -24,21 +25,16 @@ export function HomeLogButton({ books }: HomeLogButtonProps) {
   return (
     <>
       <div
-        className="fixed pointer-events-none z-30"
-        style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 96px)", right: 20 }}
+        className="pointer-events-none fixed inset-x-0 z-30 mx-auto flex max-w-lg justify-end px-5"
+        style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 96px)" }}
       >
         <button
           onClick={() => setOpen(true)}
-          className="pointer-events-auto flex items-center justify-center rounded-full text-white transition-transform active:scale-95"
-          style={{
-            width: 52,
-            height: 52,
-            backgroundColor: "var(--sienna)",
-            boxShadow: "var(--shadow-fab)",
-          }}
-          aria-label="Log reading session"
+          aria-label="Log a reading session"
+          className="md-state-layer pointer-events-auto flex h-14 items-center gap-2 rounded-corner-lg bg-primary-container px-5 text-on-primary-container md-elevation-3 transition-[box-shadow] hover:md-elevation-4"
         >
-          <Plus size={22} strokeWidth={2.5} />
+          <Plus className="z-[1] size-6" strokeWidth={2.25} />
+          <span className="z-[1] md-label-large">Log session</span>
         </button>
       </div>
 

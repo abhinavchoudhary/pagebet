@@ -1,0 +1,31 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+       <defs>
+  <radialGradient id="bg" cx="50%" cy="36%" r="78%">
+    <stop offset="0%" stop-color="#4c3019"/><stop offset="100%" stop-color="#2a190a"/>
+  </radialGradient>
+  <linearGradient id="pageL" x1="0" y1="0" x2="1" y2="0.4">
+    <stop offset="0%" stop-color="#fffaf1"/><stop offset="100%" stop-color="#f2e4cb"/>
+  </linearGradient>
+  <linearGradient id="pageR" x1="1" y1="0" x2="0" y2="0.4">
+    <stop offset="0%" stop-color="#f6e8ce"/><stop offset="100%" stop-color="#e3cfa6"/>
+  </linearGradient>
+</defs>
+       <rect width="512" height="512" rx="108" fill="url(#bg)"/>
+       <g transform="translate(256 256) scale(1.12) translate(-256 -256)">
+  <ellipse cx="256" cy="398" rx="146" ry="19" fill="#000000" opacity="0.18"/>
+  <path d="M232 86 H280 V206 L256 188 L232 206 Z" fill="#c8913a"/>
+  <path d="M256 172 L104 140 Q95 139 95 149 L95 350 Q95 359 104 361 L256 392 Z" fill="url(#pageL)"/>
+  <path d="M256 172 L408 140 Q417 139 417 149 L417 350 Q417 359 408 361 L256 392 Z" fill="url(#pageR)"/>
+  <g stroke="#6b4a2b" stroke-width="14" stroke-linecap="round" opacity="0.28">
+    <line x1="132" y1="208" x2="224" y2="226"/>
+    <line x1="132" y1="246" x2="224" y2="264"/>
+    <line x1="132" y1="284" x2="196" y2="298"/>
+  </g>
+  <g stroke="#7a5a37" stroke-width="14" stroke-linecap="round" opacity="0.20">
+    <line x1="380" y1="208" x2="288" y2="226"/>
+    <line x1="380" y1="246" x2="288" y2="264"/>
+  </g>
+  <path d="M256 172 L256 392" stroke="#3b2412" stroke-width="9" opacity="0.30"/>
+  <rect x="248" y="178" width="16" height="196" rx="8" fill="#c8913a"/>
+</g>
+     </svg>

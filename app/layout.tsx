@@ -21,6 +21,12 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "Pagebet",
   description: "Read more. Bet on it.",
+  applicationName: "Pagebet",
+  appleWebApp: {
+    capable: true,
+    title: "Pagebet",
+    statusBarStyle: "default",
+  },
 };
 
 export const viewport: Viewport = {
